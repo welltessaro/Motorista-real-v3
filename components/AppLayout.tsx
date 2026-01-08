@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Car, PieChart, User, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, Car, PieChart, User, ChevronDown, Wallet } from 'lucide-react';
 import { ViewState, Vehicle } from '../types';
 
 interface AppLayoutProps {
@@ -80,6 +80,14 @@ const AppLayout: React.FC<AppLayoutProps> = ({
           >
             <Car size={20} strokeWidth={currentView === 'FLEET' ? 2.5 : 2} />
             <span className="text-[10px] font-medium">Frota</span>
+          </button>
+
+          <button 
+            onClick={() => onNavigate('FINANCIAL')}
+            className={`flex flex-col items-center justify-center w-full h-full space-y-1 ${currentView === 'FINANCIAL' ? 'text-primary-600' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <Wallet size={20} strokeWidth={currentView === 'FINANCIAL' ? 2.5 : 2} />
+            <span className="text-[10px] font-medium">Financeiro</span>
           </button>
 
           <button 

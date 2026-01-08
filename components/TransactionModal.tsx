@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, TrendingUp, TrendingDown, Fuel, Zap } from 'lucide-react';
-import { TransactionType, Category, Transaction, Vehicle, FuelType, FUEL_LABELS, CategoryItem } from '../types';
+import { X, TrendingUp, TrendingDown, Fuel, Zap, Wallet } from 'lucide-react';
+import { TransactionType, Category, Transaction, Vehicle, FuelType, FUEL_LABELS, CategoryItem, Account } from '../types';
 import Button from './Button';
 import { formatCurrency, handlePriceChange, formatDateForInput, formatDecimal } from '../utils';
 
@@ -10,14 +10,16 @@ interface TransactionModalProps {
   onSave: (transaction: Omit<Transaction, 'id'>) => void;
   vehicle: Vehicle | null;
   categories: CategoryItem[];
+  accounts: Account[];
 }
 
-const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSave, vehicle, categories }) => {
+const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSave, vehicle, categories, accounts }) => {
   const [type, setType] = useState<TransactionType>('INCOME');
   const [amount, setAmount] = useState<number>(0);
   const [category, setCategory] = useState<string>('');
   const [date, setDate] = useState<string>(formatDateForInput(new Date()));
   const [description, setDescription] = useState('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
 
   // Fuel Specific State
   const [fuelType, setFuelType] = useState<FuelType>('GASOLINE');
@@ -32,13 +34,16 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
       
       setCategory(defaultCat?.id || '');
       
+      const defaultAcc = accounts.find(a => a.isDefault) || accounts[0];
+      setSelectedAccountId(defaultAcc?.id || '');
+      
       // Reset fields
       setFuelType('GASOLINE');
       setUnitPrice(0);
       setAmount(0);
       setDescription('');
     }
-  }, [isOpen, type, categories]);
+  }, [isOpen, type, categories, accounts]);
 
   // Auto-fill Logic for Fixed Costs
   useEffect(() => {
@@ -69,6 +74,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
     onSave({
       vehicleId: vehicle.id,
+      accountId: selectedAccountId,
       type,
       category,
       amount,
@@ -167,6 +173,29 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                   required
                 />
               </div>
+            </div>
+
+            {/* Account Selector */}
+            <div>
+               <label className="block text-xs font-medium text-slate-500 uppercase mb-2 flex items-center gap-1">
+                 <Wallet size={12} /> Conta (Carteira)
+               </label>
+               <div className="flex gap-2 overflow-x-auto pb-2">
+                 {accounts.map(acc => (
+                   <button
+                     key={acc.id}
+                     type="button"
+                     onClick={() => setSelectedAccountId(acc.id)}
+                     className={`flex-shrink-0 px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
+                       selectedAccountId === acc.id 
+                         ? 'border-slate-800 bg-slate-800 text-white' 
+                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                     }`}
+                   >
+                     {acc.name}
+                   </button>
+                 ))}
+               </div>
             </div>
 
             {/* Category */}

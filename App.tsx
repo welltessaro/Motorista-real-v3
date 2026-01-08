@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ViewState, Vehicle, Transaction, User, CategoryItem } from './types';
+import { ViewState, Vehicle, Transaction, User, CategoryItem, Account } from './types';
 import { mockBackend } from './services/mockBackend';
 import AppLayout from './components/AppLayout';
 import Dashboard from './components/Dashboard';
@@ -8,6 +8,7 @@ import VehicleManagerModal from './components/VehicleManagerModal';
 import ReportsView from './components/ReportsView';
 import FeaturesModal from './components/FeaturesModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
+import FinancialView from './components/FinancialView';
 import Onboarding from './components/Onboarding';
 import Button from './components/Button';
 import { LogOut, Star, Tags } from 'lucide-react';
@@ -20,6 +21,7 @@ const App: React.FC = () => {
   const [activeVehicleId, setActiveVehicleId] = useState<string>('');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   
   // UI State
   const [currentView, setCurrentView] = useState<ViewState['currentView']>('DASHBOARD');
@@ -38,14 +40,16 @@ const App: React.FC = () => {
       const loadedUser = mockBackend.getUser();
       const loadedVehicles = mockBackend.getVehicles();
       const loadedCategories = mockBackend.getCategories();
+      const loadedAccounts = mockBackend.getAccounts();
       
       setUser(loadedUser);
       setVehicles(loadedVehicles);
       setCategories(loadedCategories);
+      setAccounts(loadedAccounts);
 
       if (loadedVehicles.length > 0) {
         setActiveVehicleId(loadedVehicles[0].id);
-        const txs = mockBackend.getTransactions(loadedVehicles[0].id);
+        const txs = mockBackend.getTransactions(); // Load all for Financial View filtering
         setTransactions(txs);
       }
 
@@ -54,13 +58,8 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
-  // Effect to reload transactions when active vehicle changes
-  useEffect(() => {
-    if (activeVehicleId) {
-      const txs = mockBackend.getTransactions(activeVehicleId);
-      setTransactions(txs);
-    }
-  }, [activeVehicleId]);
+  // Filter transactions for Dashboard (Active Vehicle Only)
+  const dashboardTransactions = transactions.filter(t => t.vehicleId === activeVehicleId);
 
   // Actions
   const handleOnboardingComplete = (vehicle: Vehicle) => {
@@ -73,6 +72,10 @@ const App: React.FC = () => {
     mockBackend.saveUser(newUser);
     mockBackend.addVehicle(vehicle);
     
+    // Init accounts if first time
+    const initialAccounts = mockBackend.getAccounts();
+    setAccounts(initialAccounts);
+
     setUser(newUser);
     setVehicles([vehicle]);
     setActiveVehicleId(vehicle.id);
@@ -86,7 +89,22 @@ const App: React.FC = () => {
   const handleAddTransaction = (newTx: Omit<Transaction, 'id'>) => {
     const tx: Transaction = { ...newTx, id: crypto.randomUUID() };
     mockBackend.addTransaction(tx);
+    
+    // Update local transactions
     setTransactions(prev => [...prev, tx]);
+    
+    // Update local account balance
+    if (tx.accountId) {
+      setAccounts(prev => prev.map(acc => {
+        if (acc.id === tx.accountId) {
+           return {
+             ...acc,
+             balance: tx.type === 'INCOME' ? acc.balance + tx.amount : acc.balance - tx.amount
+           };
+        }
+        return acc;
+      }));
+    }
   };
 
   const handleSaveVehicle = (vehicle: Vehicle) => {
@@ -125,12 +143,18 @@ const App: React.FC = () => {
     mockBackend.deleteCategory(id);
     setCategories(prev => prev.filter(c => c.id !== id));
   };
+  
+  const handleAddAccount = (account: Account) => {
+    mockBackend.saveAccount(account);
+    setAccounts(prev => [...prev, account]);
+  }
 
   const handleLogout = () => {
     mockBackend.clearData();
     setUser(null);
     setVehicles([]);
     setTransactions([]);
+    setAccounts([]);
     setActiveVehicleId('');
     setCurrentView('DASHBOARD');
   };
@@ -169,7 +193,7 @@ const App: React.FC = () => {
       
       {currentView === 'DASHBOARD' && (
         <Dashboard 
-          transactions={transactions} 
+          transactions={dashboardTransactions} 
           activeVehicle={activeVehicle}
           onOpenTransaction={() => setIsTransactionModalOpen(true)}
           user={user}
@@ -212,8 +236,18 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {currentView === 'FINANCIAL' && (
+        <FinancialView 
+          accounts={accounts}
+          transactions={transactions}
+          categories={categories}
+          onAddAccount={handleAddAccount}
+          onOpenTransaction={() => setIsTransactionModalOpen(true)}
+        />
+      )}
+
       {currentView === 'REPORTS' && (
-        <ReportsView transactions={transactions} categories={categories} />
+        <ReportsView transactions={dashboardTransactions} categories={categories} />
       )}
 
       {currentView === 'PROFILE' && (
@@ -261,6 +295,7 @@ const App: React.FC = () => {
         onSave={handleAddTransaction}
         vehicle={activeVehicle}
         categories={categories}
+        accounts={accounts}
       />
 
       <VehicleManagerModal

@@ -63,9 +63,19 @@ export interface Vehicle {
   createdAt: string;
 }
 
+export interface Account {
+  id: string;
+  name: string;
+  type: 'CHECKING' | 'SAVINGS' | 'CASH';
+  balance: number;
+  isDefault: boolean;
+  color: string;
+}
+
 export interface Transaction {
   id: string;
   vehicleId: string;
+  accountId?: string; // Link to Account
   type: TransactionType;
   category: string;
   amount: number;
@@ -92,7 +102,7 @@ export interface AppVersionInfo {
 }
 
 export interface ViewState {
-  currentView: 'DASHBOARD' | 'FLEET' | 'REPORTS' | 'PROFILE';
+  currentView: 'DASHBOARD' | 'FLEET' | 'FINANCIAL' | 'REPORTS' | 'PROFILE';
 }
 
 export const FUEL_LABELS: Record<FuelType, string> = {

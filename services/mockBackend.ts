@@ -1,10 +1,11 @@
-import { Vehicle, Transaction, User, Category, CategoryItem, DEFAULT_CATEGORIES } from '../types';
+import { Vehicle, Transaction, User, Category, CategoryItem, DEFAULT_CATEGORIES, Account } from '../types';
 
 const KEYS = {
   VEHICLES: 'motoristareal_vehicles',
   TRANSACTIONS: 'motoristareal_transactions',
   USER: 'motoristareal_user',
   CATEGORIES: 'motoristareal_categories',
+  ACCOUNTS: 'motoristareal_accounts',
 };
 
 // Simulation of delay
@@ -20,6 +21,45 @@ class MockBackendService {
 
   saveUser(user: User): void {
     localStorage.setItem(KEYS.USER, JSON.stringify(user));
+  }
+
+  // --- ACCOUNTS (NEW) ---
+  getAccounts(): Account[] {
+    const data = localStorage.getItem(KEYS.ACCOUNTS);
+    if (!data) {
+      // Initialize default accounts
+      const defaultAccounts: Account[] = [
+        { id: 'acc_prof', name: 'Conta Profissional', type: 'CHECKING', balance: 0, isDefault: true, color: 'blue' },
+        { id: 'acc_pers', name: 'Conta Pessoal', type: 'CHECKING', balance: 0, isDefault: false, color: 'purple' },
+      ];
+      localStorage.setItem(KEYS.ACCOUNTS, JSON.stringify(defaultAccounts));
+      return defaultAccounts;
+    }
+    return JSON.parse(data);
+  }
+
+  saveAccount(account: Account): void {
+    const accounts = this.getAccounts();
+    const index = accounts.findIndex(a => a.id === account.id);
+    if (index >= 0) {
+      accounts[index] = account;
+    } else {
+      accounts.push(account);
+    }
+    localStorage.setItem(KEYS.ACCOUNTS, JSON.stringify(accounts));
+  }
+  
+  updateAccountBalance(accountId: string, amount: number, type: 'INCOME' | 'EXPENSE'): void {
+    const accounts = this.getAccounts();
+    const account = accounts.find(a => a.id === accountId);
+    if (account) {
+      if (type === 'INCOME') {
+        account.balance += amount;
+      } else {
+        account.balance -= amount;
+      }
+      this.saveAccount(account);
+    }
   }
 
   // --- CATEGORIES ---
@@ -60,10 +100,6 @@ class MockBackendService {
     const vehicles = this.getVehicles();
     vehicles.push(vehicle);
     localStorage.setItem(KEYS.VEHICLES, JSON.stringify(vehicles));
-    
-    // NOTE: Removed auto-generation of initial rent transaction.
-    // Logic: Rent is due in the future (next cycle), not immediately upon registration.
-    // The Dashboard component handles the projection of upcoming bills based on the due day.
   }
 
   updateVehicle(updatedVehicle: Vehicle): void {
@@ -85,11 +121,43 @@ class MockBackendService {
     const transactions = this.getTransactions();
     transactions.push(transaction);
     localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(transactions));
+
+    // Update Account Balance logic
+    if (transaction.accountId) {
+      this.updateAccountBalance(transaction.accountId, transaction.amount, transaction.type);
+    } else {
+      // If no account specified (legacy), try to update default account
+      const defaultAcc = this.getAccounts().find(a => a.isDefault);
+      if (defaultAcc) {
+        transaction.accountId = defaultAcc.id; // Retroactively fix logic for consistency
+        this.updateAccountBalance(defaultAcc.id, transaction.amount, transaction.type);
+        // Resave transaction with account ID
+        this.updateTransaction(transaction);
+      }
+    }
+  }
+  
+  updateTransaction(transaction: Transaction): void {
+     const transactions = this.getTransactions();
+     const index = transactions.findIndex(t => t.id === transaction.id);
+     if (index >= 0) {
+       transactions[index] = transaction;
+       localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(transactions));
+     }
   }
 
   deleteTransaction(id: string): void {
-    const transactions = this.getTransactions().filter(t => t.id !== id);
-    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    const transactions = this.getTransactions();
+    const tx = transactions.find(t => t.id === id);
+    
+    if (tx && tx.accountId) {
+      // Reverse balance operation
+      const reverseType = tx.type === 'INCOME' ? 'EXPENSE' : 'INCOME';
+      this.updateAccountBalance(tx.accountId, tx.amount, reverseType);
+    }
+    
+    const newTransactions = transactions.filter(t => t.id !== id);
+    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(newTransactions));
   }
 
   // --- UTILS ---
@@ -98,6 +166,7 @@ class MockBackendService {
     localStorage.removeItem(KEYS.VEHICLES);
     localStorage.removeItem(KEYS.TRANSACTIONS);
     localStorage.removeItem(KEYS.CATEGORIES);
+    localStorage.removeItem(KEYS.ACCOUNTS);
   }
 }
 
