@@ -1,0 +1,5 @@
+{
+  "name": "MotoristaReal",
+  "description": "Financial management platform for app drivers (Uber/99), focusing on real profit calculation and fleet management.",
+  "requestFramePermissions": []
+}
