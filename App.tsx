@@ -12,7 +12,7 @@ import CategoryManagerModal from './components/CategoryManagerModal';
 import FinancialView from './components/FinancialView';
 import Onboarding from './components/Onboarding';
 import Button from './components/Button';
-import { LogOut, Star, Tags } from 'lucide-react';
+import { LogOut, Star, Tags, MessageSquare, Heart, Copy, Check, X } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -28,6 +28,8 @@ const App: React.FC = () => {
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [isFeaturesModalOpen, setIsFeaturesModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isPixModalOpen, setIsPixModalOpen] = useState(false);
+  const [pixCopied, setPixCopied] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
 
   useEffect(() => {
@@ -144,6 +146,19 @@ const App: React.FC = () => {
       mockBackend.clearData();
       window.location.reload();
     }
+  };
+
+  const handleOpenEmailFeedback = () => {
+    const email = "contato.wttecnologia@gmail.com";
+    const subject = encodeURIComponent("sugestão de melhoria MotoristaReallAPP");
+    window.location.href = `mailto:${email}?subject=${subject}`;
+  };
+
+  const handleCopyPix = () => {
+    const pixKey = "64.324.898/0001-36";
+    navigator.clipboard.writeText(pixKey);
+    setPixCopied(true);
+    // Success message stays until closed or reset
   };
 
   if (isLoading) {
@@ -270,6 +285,35 @@ const App: React.FC = () => {
             </button>
 
             <button 
+              onClick={handleOpenEmailFeedback}
+              className="w-full bg-white p-5 rounded-3xl border border-slate-100 flex items-center justify-between group active:bg-slate-50 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-emerald-50 text-emerald-500 rounded-2xl">
+                  <MessageSquare size={20} />
+                </div>
+                <span className="font-bold text-slate-700">Deixe suas sugestões</span>
+              </div>
+              <MessageSquare size={16} className="text-slate-300" />
+            </button>
+
+            <button 
+              onClick={() => {
+                setIsPixModalOpen(true);
+                setPixCopied(false);
+              }}
+              className="w-full bg-white p-5 rounded-3xl border border-slate-100 flex items-center justify-between group active:bg-slate-50 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-rose-50 text-rose-500 rounded-2xl">
+                  <Heart size={20} fill="currentColor" />
+                </div>
+                <span className="font-bold text-slate-700">Ajude nosso projeto</span>
+              </div>
+              <Heart size={16} className="text-slate-300" />
+            </button>
+
+            <button 
               onClick={() => setIsFeaturesModalOpen(true)}
               className="w-full bg-slate-800 p-5 rounded-3xl flex items-center justify-between group active:opacity-90 transition-opacity text-white"
             >
@@ -293,6 +337,66 @@ const App: React.FC = () => {
           </button>
           
           <p className="text-center text-[10px] text-slate-300 font-black uppercase tracking-[0.2em]">Build 1.2.0-stable</p>
+        </div>
+      )}
+
+      {/* PIX Donation Modal */}
+      {isPixModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white w-full max-w-sm rounded-[32px] shadow-2xl overflow-hidden relative animate-scale-up">
+            <button 
+              onClick={() => setIsPixModalOpen(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 active:scale-90 transition-transform"
+            >
+              <X size={24} />
+            </button>
+
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Heart size={32} fill="currentColor" />
+              </div>
+              
+              <h3 className="text-xl font-black text-slate-800 mb-2">Apoie o MotoristaReal</h3>
+              <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+                Sua ajuda mantém o projeto gratuito e nos permite desenvolver novas funcionalidades para todos os motoristas.
+              </p>
+
+              {!pixCopied ? (
+                <div className="space-y-4">
+                  <div className="bg-slate-50 border border-slate-100 p-4 rounded-2xl">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Chave CNPJ</p>
+                    <p className="font-mono font-bold text-slate-700 text-sm">64.324.898/0001-36</p>
+                  </div>
+                  
+                  <Button 
+                    fullWidth 
+                    onClick={handleCopyPix}
+                    className="bg-slate-900 text-white hover:bg-black py-4"
+                  >
+                    <Copy size={18} /> Copiar Chave PIX
+                  </Button>
+                </div>
+              ) : (
+                <div className="animate-fade-in space-y-4 py-4">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Check size={24} strokeWidth={3} />
+                  </div>
+                  <h4 className="font-bold text-emerald-600">Chave Copiada!</h4>
+                  <p className="text-sm text-slate-500 px-4">
+                    Muito obrigado pelo apoio! O MotoristaReal cresce junto com você. 🚀
+                  </p>
+                  <Button 
+                    fullWidth 
+                    variant="ghost" 
+                    onClick={() => setIsPixModalOpen(false)}
+                    className="text-slate-400 font-bold"
+                  >
+                    Fechar
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
