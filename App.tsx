@@ -111,6 +111,15 @@ const App: React.FC = () => {
     setIsVehicleModalOpen(false);
   };
 
+  const handleLogout = () => {
+    mockBackend.clearData();
+    setUser(null);
+    setVehicles([]);
+    setTransactions([]);
+    setActiveVehicleId('');
+    setCurrentView('DASHBOARD');
+  };
+
   // Render Logic
 
   if (isLoading) {
@@ -215,8 +224,8 @@ const App: React.FC = () => {
             </button>
           </div>
 
-          <Button variant="ghost" fullWidth className="text-red-500 hover:text-red-600 hover:bg-red-50">
-            <LogOut size={18} /> Sair do App
+          <Button variant="ghost" fullWidth onClick={handleLogout} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+            <LogOut size={18} /> Sair do App (Resetar)
           </Button>
           
           <p className="text-center text-xs text-slate-400 mt-8">Versão 1.0.0 (MVP)</p>
@@ -237,6 +246,7 @@ const App: React.FC = () => {
         vehicle={editingVehicle}
         onSave={handleSaveVehicle}
         onArchive={handleArchiveVehicle}
+        onAddTransaction={handleAddTransaction}
       />
 
       <FeaturesModal 

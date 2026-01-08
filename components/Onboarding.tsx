@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Vehicle, OwnershipType } from '../types';
 import Button from './Button';
 import { formatPlate, handlePriceChange, formatCurrency, isValidPlate, formatDateForInput } from '../utils';
-import { Car, ChevronRight, CheckCircle, Search, ChevronDown, AlertCircle, ShieldCheck, Calendar, CreditCard, Layers } from 'lucide-react';
+import { Car, ChevronRight, ChevronLeft, CheckCircle, Search, ChevronDown, AlertCircle, ShieldCheck, Calendar, CreditCard, Layers, Clock } from 'lucide-react';
 import { mockBackend } from '../services/mockBackend';
 
 interface OnboardingProps {
@@ -32,6 +32,16 @@ const CAR_DATA: Record<string, string[]> = {
   "GWM": ["Haval H6", "Ora 03"]
 };
 
+const WEEK_DAYS = [
+  { value: 1, label: 'Segunda-feira' },
+  { value: 2, label: 'Terça-feira' },
+  { value: 3, label: 'Quarta-feira' },
+  { value: 4, label: 'Quinta-feira' },
+  { value: 5, label: 'Sexta-feira' },
+  { value: 6, label: 'Sábado' },
+  { value: 7, label: 'Domingo' },
+];
+
 const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const [step, setStep] = useState(1);
   
@@ -41,9 +51,18 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const [plate, setPlate] = useState('');
   const [ownershipType, setOwnershipType] = useState<OwnershipType>('OWNED');
   
+  // Financial State
   const [costValue, setCostValue] = useState(0); // Rent or Installment Amount
+  
+  // Rent Specific
+  const [rentFrequency, setRentFrequency] = useState<'WEEKLY' | 'MONTHLY'>('MONTHLY');
+  const [rentDueDay, setRentDueDay] = useState<number>(5); // 1-31 (Monthly) or 1-7 (Weekly)
+
+  // Financing Specific
   const [financingTotalMonths, setFinancingTotalMonths] = useState<string>('');
   const [financingPaidMonths, setFinancingPaidMonths] = useState<string>('');
+  const [financingDueDay, setFinancingDueDay] = useState<number>(10);
+  
   const [vehicleValue, setVehicleValue] = useState(0); // For OWNED depreciation
   
   // Insurance State
@@ -100,6 +119,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   };
 
   const nextStep = () => setStep(s => s + 1);
+  const prevStep = () => setStep(s => Math.max(1, s - 1));
 
   const handleFinish = () => {
     const fullModelName = `${brand} ${model}`.trim();
@@ -109,10 +129,18 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       model: fullModelName,
       plate,
       ownershipType,
+      
+      // Rent Data
       rentAmount: ownershipType === 'RENTED' ? costValue : 0,
+      rentFrequency: ownershipType === 'RENTED' ? rentFrequency : undefined,
+      rentDueDay: ownershipType === 'RENTED' ? rentDueDay : undefined,
+
+      // Financing Data
       financingInstallment: ownershipType === 'FINANCED' ? costValue : 0,
+      financingDueDay: ownershipType === 'FINANCED' ? financingDueDay : undefined,
       financingTotalMonths: ownershipType === 'FINANCED' ? parseInt(financingTotalMonths) || 0 : undefined,
       financingPaidMonths: ownershipType === 'FINANCED' ? parseInt(financingPaidMonths) || 0 : undefined,
+      
       vehicleValue: ownershipType === 'OWNED' ? vehicleValue : undefined,
       
       // Detailed Insurance Data
@@ -266,7 +294,14 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 </button>
               ))}
             </div>
-            <Button fullWidth onClick={nextStep}>Continuar <ChevronRight size={18} /></Button>
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={prevStep} className="px-3">
+                 <ChevronLeft size={20} />
+              </Button>
+              <Button fullWidth onClick={nextStep} className="flex-1">
+                 Continuar <ChevronRight size={18} />
+              </Button>
+            </div>
           </div>
         )}
 
@@ -275,21 +310,29 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             <h2 className="text-lg font-bold text-slate-700">Custos Fixos</h2>
             
             {ownershipType === 'RENTED' && (
-              <div>
-                <label className="text-sm text-slate-500 font-medium">Valor do Aluguel (Mensal)</label>
-                <input 
-                  value={formatCurrency(costValue).replace('R$', '').trim()}
-                  onChange={e => setCostValue(handlePriceChange(e.target.value))}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1 text-lg font-bold text-slate-800 focus:ring-2 focus:ring-primary-500 outline-none"
-                  placeholder="0,00"
-                />
-              </div>
-            )}
-
-            {ownershipType === 'FINANCED' && (
               <div className="space-y-4">
+                {/* Rent Frequency Toggle */}
+                <div className="bg-slate-100 p-1 rounded-xl flex">
+                  <button
+                    onClick={() => setRentFrequency('MONTHLY')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                      rentFrequency === 'MONTHLY' ? 'bg-white text-primary-600 shadow-sm' : 'text-slate-500'
+                    }`}
+                  >
+                    Mensal
+                  </button>
+                  <button
+                    onClick={() => setRentFrequency('WEEKLY')}
+                    className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                      rentFrequency === 'WEEKLY' ? 'bg-white text-primary-600 shadow-sm' : 'text-slate-500'
+                    }`}
+                  >
+                    Semanal
+                  </button>
+                </div>
+
                 <div>
-                  <label className="text-sm text-slate-500 font-medium">Valor da Parcela</label>
+                  <label className="text-sm text-slate-500 font-medium">Valor do Aluguel ({rentFrequency === 'MONTHLY' ? 'Mensal' : 'Semanal'})</label>
                   <input 
                     value={formatCurrency(costValue).replace('R$', '').trim()}
                     onChange={e => setCostValue(handlePriceChange(e.target.value))}
@@ -297,6 +340,67 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                     placeholder="0,00"
                   />
                 </div>
+
+                <div>
+                   <label className="text-sm text-slate-500 font-medium">Dia do Vencimento</label>
+                   {rentFrequency === 'MONTHLY' ? (
+                     <div className="relative">
+                       <input 
+                         type="number"
+                         min="1"
+                         max="31"
+                         value={rentDueDay}
+                         onChange={e => setRentDueDay(Number(e.target.value))}
+                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1 font-bold text-slate-800 focus:ring-2 focus:ring-primary-500 outline-none pl-10"
+                       />
+                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 mt-0.5" size={18} />
+                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none mt-0.5">DIA DO MÊS</span>
+                     </div>
+                   ) : (
+                     <div className="relative mt-1">
+                        <select 
+                          value={rentDueDay}
+                          onChange={e => setRentDueDay(Number(e.target.value))}
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-primary-500 outline-none appearance-none"
+                        >
+                          {WEEK_DAYS.map(day => (
+                            <option key={day.value} value={day.value}>{day.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                     </div>
+                   )}
+                </div>
+              </div>
+            )}
+
+            {ownershipType === 'FINANCED' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                   <div className="col-span-2">
+                    <label className="text-sm text-slate-500 font-medium">Valor da Parcela</label>
+                    <input 
+                      value={formatCurrency(costValue).replace('R$', '').trim()}
+                      onChange={e => setCostValue(handlePriceChange(e.target.value))}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1 text-lg font-bold text-slate-800 focus:ring-2 focus:ring-primary-500 outline-none"
+                      placeholder="0,00"
+                    />
+                   </div>
+                   <div className="col-span-1">
+                    <label className="text-sm text-slate-500 font-medium">Dia Venc.</label>
+                    <div className="relative">
+                      <input 
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={financingDueDay}
+                        onChange={e => setFinancingDueDay(Number(e.target.value))}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1 font-bold text-slate-800 focus:ring-2 focus:ring-primary-500 outline-none text-center"
+                      />
+                    </div>
+                   </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                    <div>
                     <label className="text-sm text-slate-500 font-medium">Prazo Total (Meses)</label>
@@ -400,10 +504,15 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                   </div>
               )}
             </div>
-
-            <Button fullWidth onClick={handleFinish} variant="primary">
-              <CheckCircle size={18} /> Finalizar Cadastro
-            </Button>
+            
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={prevStep} className="px-3">
+                 <ChevronLeft size={20} />
+              </Button>
+              <Button fullWidth onClick={handleFinish} variant="primary" className="flex-1">
+                <CheckCircle size={18} /> Finalizar Cadastro
+              </Button>
+            </div>
           </div>
         )}
 

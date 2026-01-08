@@ -74,6 +74,13 @@ class MockBackendService {
     const transactions = this.getTransactions().filter(t => t.id !== id);
     localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(transactions));
   }
+
+  // --- UTILS ---
+  clearData(): void {
+    localStorage.removeItem(KEYS.USER);
+    localStorage.removeItem(KEYS.VEHICLES);
+    localStorage.removeItem(KEYS.TRANSACTIONS);
+  }
 }
 
 export const mockBackend = new MockBackendService();

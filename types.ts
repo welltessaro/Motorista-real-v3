@@ -24,7 +24,8 @@ export interface Vehicle {
   
   // Rent
   rentAmount?: number; // Weekly or Monthly
-  rentDueDay?: number; // 1-31
+  rentFrequency?: 'WEEKLY' | 'MONTHLY';
+  rentDueDay?: number; // 1-31 (Monthly) or 1-7 (Weekly, 1=Mon, 7=Sun)
 
   // Financing
   financingInstallment?: number;
