@@ -211,6 +211,10 @@ const Dashboard: React.FC<DashboardProps> = ({
     // Normalize today to start of day for comparison
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+    // Normalize Vehicle Creation Date to compare apples to apples
+    const vehicleCreationDate = new Date(activeVehicle.createdAt);
+    vehicleCreationDate.setHours(0, 0, 0, 0);
+
     // Helper to find the actual next due date based on payment history
     const getNextDueDate = (category: string, dueDay: number, frequency: 'MONTHLY' | 'WEEKLY' = 'MONTHLY') => {
       let targetDate: Date;
@@ -239,6 +243,21 @@ const Dashboard: React.FC<DashboardProps> = ({
       const loopLimit = frequency === 'MONTHLY' ? 12 : 52;
 
       for (let i = 0; i < loopLimit; i++) {
+        // CRITICAL FIX:
+        // If the calculated target date is BEFORE the vehicle was created, 
+        // it cannot be an overdue bill. Skip it immediately.
+        const targetDayStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+        
+        if (targetDayStart < vehicleCreationDate) {
+          // Advance to next period
+          if (frequency === 'MONTHLY') {
+             targetDate.setMonth(targetDate.getMonth() + 1);
+          } else {
+             targetDate.setDate(targetDate.getDate() + 7);
+          }
+          continue; 
+        }
+
         const windowStart = new Date(targetDate);
         const windowEnd = new Date(targetDate);
 
