@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, TrendingUp, TrendingDown, Fuel, Zap } from 'lucide-react';
-import { TransactionType, Category, Transaction, Vehicle, CATEGORY_LABELS, FuelType, FUEL_LABELS } from '../types';
+import { TransactionType, Category, Transaction, Vehicle, FuelType, FUEL_LABELS, CategoryItem } from '../types';
 import Button from './Button';
 import { formatCurrency, handlePriceChange, formatDateForInput, formatDecimal } from '../utils';
 
@@ -9,12 +9,13 @@ interface TransactionModalProps {
   onClose: () => void;
   onSave: (transaction: Omit<Transaction, 'id'>) => void;
   vehicle: Vehicle | null;
+  categories: CategoryItem[];
 }
 
-const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSave, vehicle }) => {
+const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, onSave, vehicle, categories }) => {
   const [type, setType] = useState<TransactionType>('INCOME');
   const [amount, setAmount] = useState<number>(0);
-  const [category, setCategory] = useState<Category>(Category.UBER);
+  const [category, setCategory] = useState<string>('');
   const [date, setDate] = useState<string>(formatDateForInput(new Date()));
   const [description, setDescription] = useState('');
 
@@ -22,19 +23,40 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
   const [fuelType, setFuelType] = useState<FuelType>('GASOLINE');
   const [unitPrice, setUnitPrice] = useState<number>(0);
 
-  // Reset category when type changes or modal opens
+  // Initialize Default Selection
   useEffect(() => {
     if (isOpen) {
-      if (type === 'INCOME') {
-        setCategory(Category.UBER);
-      } else {
-        setCategory(Category.FUEL);
-      }
-      // Reset fuel fields
+      const defaultCat = type === 'INCOME' 
+        ? categories.find(c => c.type === 'INCOME' || c.type === 'BOTH') 
+        : categories.find(c => c.id === Category.FUEL); // Default to Fuel for expense
+      
+      setCategory(defaultCat?.id || '');
+      
+      // Reset fields
       setFuelType('GASOLINE');
       setUnitPrice(0);
+      setAmount(0);
+      setDescription('');
     }
-  }, [isOpen, type]);
+  }, [isOpen, type, categories]);
+
+  // Auto-fill Logic for Fixed Costs
+  useEffect(() => {
+    if (isOpen && vehicle && type === 'EXPENSE') {
+      if (category === Category.RENT && vehicle.ownershipType === 'RENTED' && vehicle.rentAmount) {
+        setAmount(vehicle.rentAmount);
+        const freq = vehicle.rentFrequency === 'WEEKLY' ? 'Semanal' : 'Mensal';
+        setDescription(`Aluguel ${freq}`);
+      } else if (category === Category.FINANCING && vehicle.ownershipType === 'FINANCED' && vehicle.financingInstallment) {
+        setAmount(vehicle.financingInstallment);
+        const currentParcel = (vehicle.financingPaidMonths || 0) + 1;
+        setDescription(`Parcela ${currentParcel}/${vehicle.financingTotalMonths || '?'}`);
+      } else if (category === Category.INSURANCE && vehicle.insuranceInstallmentValue) {
+        setAmount(vehicle.insuranceInstallmentValue);
+        setDescription('Parcela Seguro');
+      }
+    }
+  }, [category, vehicle, isOpen, type]);
 
   if (!isOpen || !vehicle) return null;
 
@@ -65,23 +87,14 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
     onClose();
   };
 
-  const incomeCategories = [Category.UBER, Category.NINE_NINE, Category.OTHER];
-  
-  // Filter expense categories based on vehicle ownership logic
-  const expenseCategories = [
-    Category.FUEL, 
-    Category.MAINTENANCE, 
-    Category.INSURANCE, 
-    Category.RENT, 
-    Category.FINANCING, 
-    Category.OTHER
-  ].filter(cat => {
-    // Logic: Only show RENT if vehicle is RENTED
-    if (cat === Category.RENT) return vehicle.ownershipType === 'RENTED';
+  const visibleCategories = categories.filter(cat => {
+    // Filter by Type
+    if (cat.type !== 'BOTH' && cat.type !== type) return false;
     
-    // Logic: Only show FINANCING if vehicle is FINANCED
-    if (cat === Category.FINANCING) return vehicle.ownershipType === 'FINANCED';
-    
+    // Special Logic for Vehicle Types
+    if (cat.id === Category.RENT && vehicle.ownershipType !== 'RENTED') return false;
+    if (cat.id === Category.FINANCING && vehicle.ownershipType !== 'FINANCED') return false;
+
     return true;
   });
 
@@ -160,18 +173,19 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             <div>
               <label className="block text-xs font-medium text-slate-500 uppercase mb-2">Categoria</label>
               <div className="grid grid-cols-3 gap-2">
-                {(type === 'INCOME' ? incomeCategories : expenseCategories).map((cat) => (
+                {visibleCategories.map((cat) => (
                   <button
-                    key={cat}
+                    key={cat.id}
                     type="button"
-                    onClick={() => setCategory(cat)}
-                    className={`p-2 text-xs font-medium rounded-lg border transition-all ${
-                      category === cat
-                        ? 'bg-primary-50 border-primary-200 text-primary-700'
-                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
-                    }`}
+                    onClick={() => setCategory(cat.id)}
+                    style={{
+                      backgroundColor: category === cat.id ? `${cat.color}20` : 'white',
+                      borderColor: category === cat.id ? cat.color : '#e2e8f0',
+                      color: category === cat.id ? cat.color : '#475569'
+                    }}
+                    className="p-2 text-xs font-medium rounded-lg border transition-all hover:bg-slate-50"
                   >
-                    {CATEGORY_LABELS[cat]}
+                    {cat.label}
                   </button>
                 ))}
               </div>

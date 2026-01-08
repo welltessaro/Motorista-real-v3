@@ -1,14 +1,20 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Transaction, Category, CATEGORY_COLORS, CATEGORY_LABELS } from '../types';
+import { Transaction, Category, CategoryItem } from '../types';
 import { formatCurrency, getDeviceLocale } from '../utils';
 
 interface ReportsViewProps {
   transactions: Transaction[];
+  categories: CategoryItem[];
 }
 
-const ReportsView: React.FC<ReportsViewProps> = ({ transactions }) => {
+const ReportsView: React.FC<ReportsViewProps> = ({ transactions, categories }) => {
   
+  // Helper to get category details
+  const getCatDetails = (id: string) => {
+    return categories.find(c => c.id === id) || { label: id, color: '#94a3b8' };
+  };
+
   // Prepare Data for Weekly Chart (Last 7 days simplified)
   const getLast7DaysData = () => {
     const data = [];
@@ -27,18 +33,24 @@ const ReportsView: React.FC<ReportsViewProps> = ({ transactions }) => {
     return data;
   };
 
-  // Prepare Data for Platform Split
+  // Prepare Data for Platform/Category Split (Income)
   const getPlatformData = () => {
     const incomeTx = transactions.filter(t => t.type === 'INCOME');
-    const uber = incomeTx.filter(t => t.category === Category.UBER).reduce((acc, t) => acc + t.amount, 0);
-    const nine = incomeTx.filter(t => t.category === Category.NINE_NINE).reduce((acc, t) => acc + t.amount, 0);
-    const other = incomeTx.filter(t => t.category === Category.OTHER).reduce((acc, t) => acc + t.amount, 0);
+    
+    // Group by category ID
+    const grouped: Record<string, number> = {};
+    incomeTx.forEach(t => {
+      grouped[t.category] = (grouped[t.category] || 0) + t.amount;
+    });
 
-    return [
-      { name: 'Uber', value: uber, color: CATEGORY_COLORS[Category.UBER] },
-      { name: '99', value: nine, color: CATEGORY_COLORS[Category.NINE_NINE] },
-      { name: 'Outros', value: other, color: CATEGORY_COLORS[Category.OTHER] },
-    ].filter(d => d.value > 0);
+    return Object.keys(grouped).map(catId => {
+      const details = getCatDetails(catId);
+      return {
+        name: details.label,
+        value: grouped[catId],
+        color: details.color
+      };
+    }).sort((a, b) => b.value - a.value); // Sort descending
   };
 
   const weeklyData = getLast7DaysData();
@@ -69,43 +81,47 @@ const ReportsView: React.FC<ReportsViewProps> = ({ transactions }) => {
 
       {/* Platform Split */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
-        <h3 className="text-sm font-semibold text-slate-500 uppercase mb-4">Ganhos por Plataforma</h3>
-        <div className="flex flex-col md:flex-row items-center">
-          <div className="h-48 w-48 relative">
-             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={platformData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {platformData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <span className="text-xs font-bold text-slate-400">TOTAL</span>
+        <h3 className="text-sm font-semibold text-slate-500 uppercase mb-4">Ganhos por Categoria</h3>
+        {platformData.length > 0 ? (
+          <div className="flex flex-col md:flex-row items-center">
+            <div className="h-48 w-48 relative">
+               <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={platformData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {platformData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="text-xs font-bold text-slate-400">TOTAL</span>
+              </div>
+            </div>
+            
+            <div className="mt-4 md:mt-0 md:ml-8 flex-1 w-full space-y-3">
+               {platformData.map((p) => (
+                 <div key={p.name} className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: p.color }} />
+                      <span className="text-sm font-medium text-slate-700">{p.name}</span>
+                    </div>
+                    <span className="text-sm font-bold text-slate-800">{formatCurrency(p.value)}</span>
+                 </div>
+               ))}
             </div>
           </div>
-          
-          <div className="mt-4 md:mt-0 md:ml-8 flex-1 w-full space-y-3">
-             {platformData.map((p) => (
-               <div key={p.name} className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: p.color }} />
-                    <span className="text-sm font-medium text-slate-700">{p.name}</span>
-                  </div>
-                  <span className="text-sm font-bold text-slate-800">{formatCurrency(p.value)}</span>
-               </div>
-             ))}
-          </div>
-        </div>
+        ) : (
+          <p className="text-center text-slate-400 py-8 text-sm">Nenhum ganho registrado no período.</p>
+        )}
       </div>
     </div>
   );

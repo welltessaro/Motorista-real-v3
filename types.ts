@@ -14,6 +14,25 @@ export enum Category {
   OTHER = 'OTHER'
 }
 
+export interface CategoryItem {
+  id: string;
+  label: string;
+  type: 'INCOME' | 'EXPENSE' | 'BOTH';
+  color: string;
+  isSystem: boolean;
+}
+
+export const DEFAULT_CATEGORIES: CategoryItem[] = [
+  { id: 'UBER', label: 'Uber', type: 'INCOME', color: '#10b981', isSystem: true },
+  { id: '99', label: '99', type: 'INCOME', color: '#f59e0b', isSystem: true },
+  { id: 'FUEL', label: 'Combustível', type: 'EXPENSE', color: '#ef4444', isSystem: true },
+  { id: 'MAINTENANCE', label: 'Manutenção', type: 'EXPENSE', color: '#6366f1', isSystem: true },
+  { id: 'INSURANCE', label: 'Seguro', type: 'EXPENSE', color: '#8b5cf6', isSystem: true },
+  { id: 'RENT', label: 'Aluguel', type: 'EXPENSE', color: '#ec4899', isSystem: true },
+  { id: 'FINANCING', label: 'Parcela', type: 'EXPENSE', color: '#14b8a6', isSystem: true },
+  { id: 'OTHER', label: 'Outros', type: 'BOTH', color: '#94a3b8', isSystem: true },
+];
+
 export type FuelType = 'GASOLINE' | 'ETHANOL' | 'GNV' | 'ELECTRIC';
 
 export interface Vehicle {
@@ -48,7 +67,7 @@ export interface Transaction {
   id: string;
   vehicleId: string;
   type: TransactionType;
-  category: Category;
+  category: string;
   amount: number;
   date: string; // ISO String
   description?: string;
@@ -76,31 +95,9 @@ export interface ViewState {
   currentView: 'DASHBOARD' | 'FLEET' | 'REPORTS' | 'PROFILE';
 }
 
-export const CATEGORY_LABELS: Record<Category, string> = {
-  [Category.UBER]: 'Uber',
-  [Category.NINE_NINE]: '99',
-  [Category.FUEL]: 'Combustível',
-  [Category.MAINTENANCE]: 'Manutenção',
-  [Category.INSURANCE]: 'Seguro',
-  [Category.RENT]: 'Aluguel',
-  [Category.FINANCING]: 'Parcela',
-  [Category.OTHER]: 'Outros',
-};
-
 export const FUEL_LABELS: Record<FuelType, string> = {
   'GASOLINE': 'Gasolina',
   'ETHANOL': 'Etanol',
   'GNV': 'GNV',
   'ELECTRIC': 'Elétrico (kWh)'
-};
-
-export const CATEGORY_COLORS: Record<Category, string> = {
-  [Category.UBER]: '#10b981', // green-500
-  [Category.NINE_NINE]: '#f59e0b', // amber-500
-  [Category.FUEL]: '#ef4444', // red-500
-  [Category.MAINTENANCE]: '#6366f1', // indigo-500
-  [Category.INSURANCE]: '#8b5cf6', // violet-500
-  [Category.RENT]: '#ec4899', // pink-500
-  [Category.FINANCING]: '#14b8a6', // teal-500
-  [Category.OTHER]: '#94a3b8', // slate-400
 };

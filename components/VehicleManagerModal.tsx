@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Car, CreditCard, Archive, Trash2, Calendar, Layers, ShieldCheck, Plus, CheckCircle2 } from 'lucide-react';
+import { X, Car, CreditCard, Archive, Trash2, Calendar, Layers, ShieldCheck, Plus, CheckCircle2, ChevronDown } from 'lucide-react';
 import { Vehicle, OwnershipType, Transaction, Category } from '../types';
 import Button from './Button';
 import { formatCurrency, handlePriceChange, formatPlate, formatDateForInput } from '../utils';
@@ -13,6 +13,16 @@ interface VehicleManagerModalProps {
   onAddTransaction?: (transaction: Omit<Transaction, 'id'>) => void;
 }
 
+const WEEK_DAYS = [
+  { value: 1, label: 'Segunda-feira' },
+  { value: 2, label: 'Terça-feira' },
+  { value: 3, label: 'Quarta-feira' },
+  { value: 4, label: 'Quinta-feira' },
+  { value: 5, label: 'Sexta-feira' },
+  { value: 6, label: 'Sábado' },
+  { value: 7, label: 'Domingo' },
+];
+
 const VehicleManagerModal: React.FC<VehicleManagerModalProps> = ({ isOpen, onClose, vehicle, onSave, onArchive, onAddTransaction }) => {
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'FINANCIAL'>('GENERAL');
   
@@ -23,6 +33,7 @@ const VehicleManagerModal: React.FC<VehicleManagerModalProps> = ({ isOpen, onClo
   
   // Financial State
   const [rentAmount, setRentAmount] = useState(0);
+  const [rentFrequency, setRentFrequency] = useState<'WEEKLY' | 'MONTHLY'>('MONTHLY');
   const [rentDueDay, setRentDueDay] = useState<number>(5);
 
   const [financingInstallment, setFinancingInstallment] = useState(0);
@@ -49,6 +60,7 @@ const VehicleManagerModal: React.FC<VehicleManagerModalProps> = ({ isOpen, onClo
       setOwnershipType(vehicle.ownershipType);
       
       setRentAmount(vehicle.rentAmount || 0);
+      setRentFrequency(vehicle.rentFrequency || 'MONTHLY');
       setRentDueDay(vehicle.rentDueDay || 5);
 
       setFinancingInstallment(vehicle.financingInstallment || 0);
@@ -71,6 +83,7 @@ const VehicleManagerModal: React.FC<VehicleManagerModalProps> = ({ isOpen, onClo
       setPlate('');
       setOwnershipType('OWNED');
       setRentAmount(0);
+      setRentFrequency('MONTHLY');
       setRentDueDay(5);
       setFinancingInstallment(0);
       setFinancingDueDay(10);
@@ -102,6 +115,7 @@ const VehicleManagerModal: React.FC<VehicleManagerModalProps> = ({ isOpen, onClo
       ownershipType,
       
       rentAmount: ownershipType === 'RENTED' ? rentAmount : 0,
+      rentFrequency: ownershipType === 'RENTED' ? rentFrequency : undefined,
       rentDueDay: ownershipType === 'RENTED' ? rentDueDay : undefined,
 
       financingInstallment: ownershipType === 'FINANCED' ? financingInstallment : 0,
@@ -155,7 +169,7 @@ const VehicleManagerModal: React.FC<VehicleManagerModalProps> = ({ isOpen, onClo
         type: 'EXPENSE',
         category: Category.FINANCING,
         amount: financingInstallment,
-        date: new Date().toISOString(),
+        date: formatDateForInput(new Date()), // Fixed: Use standardized date format (YYYY-MM-DD)
         description: `Pagamento Parcela ${nextInstallmentNumber}/${financingTotalMonths}`
       };
       setPendingTransactions(prev => [...prev, newTx]);
@@ -243,31 +257,70 @@ const VehicleManagerModal: React.FC<VehicleManagerModalProps> = ({ isOpen, onClo
           {activeTab === 'FINANCIAL' && (
             <div className="space-y-4">
                {ownershipType === 'RENTED' && (
-                <div className="grid grid-cols-3 gap-4">
-                   <div className="col-span-2">
-                     <label className="block text-sm font-medium text-slate-700 mb-1">Aluguel Mensal</label>
-                     <input
-                      type="text"
-                      value={formatCurrency(rentAmount).replace('R$', '').trim()}
-                      onChange={(e) => setRentAmount(handlePriceChange(e.target.value))}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
-                     />
-                   </div>
-                   <div className="col-span-1">
-                     <label className="block text-sm font-medium text-slate-700 mb-1">Vencimento</label>
-                     <div className="relative">
-                        <input
-                          type="number"
-                          min="1"
-                          max="31"
-                          value={rentDueDay}
-                          onChange={(e) => setRentDueDay(Number(e.target.value))}
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none pl-8"
-                        />
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">DIA</span>
-                     </div>
-                   </div>
-                </div>
+                 <div className="space-y-4">
+                    {/* Frequency Toggle */}
+                    <div className="bg-slate-100 p-1 rounded-xl flex">
+                      <button
+                        onClick={() => setRentFrequency('MONTHLY')}
+                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                          rentFrequency === 'MONTHLY' ? 'bg-white text-primary-600 shadow-sm' : 'text-slate-500'
+                        }`}
+                        type="button"
+                      >
+                        Mensal
+                      </button>
+                      <button
+                        onClick={() => setRentFrequency('WEEKLY')}
+                        className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                          rentFrequency === 'WEEKLY' ? 'bg-white text-primary-600 shadow-sm' : 'text-slate-500'
+                        }`}
+                        type="button"
+                      >
+                        Semanal
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                       <div className="col-span-2">
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Valor do Aluguel</label>
+                         <input
+                          type="text"
+                          value={formatCurrency(rentAmount).replace('R$', '').trim()}
+                          onChange={(e) => setRentAmount(handlePriceChange(e.target.value))}
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none"
+                         />
+                       </div>
+                       <div className="col-span-1">
+                         <label className="block text-sm font-medium text-slate-700 mb-1">Vencimento</label>
+                         {rentFrequency === 'MONTHLY' ? (
+                           <div className="relative">
+                              <input
+                                type="number"
+                                min="1"
+                                max="31"
+                                value={rentDueDay}
+                                onChange={(e) => setRentDueDay(Number(e.target.value))}
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none pl-6 text-center"
+                              />
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-bold">DIA</span>
+                           </div>
+                         ) : (
+                           <div className="relative">
+                              <select 
+                                value={rentDueDay}
+                                onChange={e => setRentDueDay(Number(e.target.value))}
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-xs appearance-none font-bold"
+                              >
+                                {WEEK_DAYS.map(day => (
+                                  <option key={day.value} value={day.value}>{day.label.split('-')[0]}</option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                           </div>
+                         )}
+                       </div>
+                    </div>
+                 </div>
                )}
 
                {ownershipType === 'FINANCED' && (

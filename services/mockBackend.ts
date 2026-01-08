@@ -1,9 +1,10 @@
-import { Vehicle, Transaction, User, Category } from '../types';
+import { Vehicle, Transaction, User, Category, CategoryItem, DEFAULT_CATEGORIES } from '../types';
 
 const KEYS = {
   VEHICLES: 'motoristareal_vehicles',
   TRANSACTIONS: 'motoristareal_transactions',
   USER: 'motoristareal_user',
+  CATEGORIES: 'motoristareal_categories',
 };
 
 // Simulation of delay
@@ -21,6 +22,34 @@ class MockBackendService {
     localStorage.setItem(KEYS.USER, JSON.stringify(user));
   }
 
+  // --- CATEGORIES ---
+  getCategories(): CategoryItem[] {
+    const data = localStorage.getItem(KEYS.CATEGORIES);
+    if (!data) {
+      // Initialize default categories
+      localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
+      return DEFAULT_CATEGORIES;
+    }
+    return JSON.parse(data);
+  }
+
+  saveCategory(category: CategoryItem): void {
+    const categories = this.getCategories();
+    // Check if update or new
+    const index = categories.findIndex(c => c.id === category.id);
+    if (index >= 0) {
+      categories[index] = category;
+    } else {
+      categories.push(category);
+    }
+    localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(categories));
+  }
+
+  deleteCategory(id: string): void {
+    const categories = this.getCategories().filter(c => c.id !== id);
+    localStorage.setItem(KEYS.CATEGORIES, JSON.stringify(categories));
+  }
+
   // --- VEHICLES ---
   getVehicles(): Vehicle[] {
     const data = localStorage.getItem(KEYS.VEHICLES);
@@ -32,21 +61,9 @@ class MockBackendService {
     vehicles.push(vehicle);
     localStorage.setItem(KEYS.VEHICLES, JSON.stringify(vehicles));
     
-    // Auto-generate initial expense transaction if applicable (simplified simulation)
-    // In a real backend, cron jobs would handle recurring expenses.
-    // Here we just add one transaction for the current month if it has fixed costs.
-    const today = new Date().toISOString();
-    if (vehicle.rentAmount && vehicle.rentAmount > 0) {
-       this.addTransaction({
-           id: crypto.randomUUID(),
-           vehicleId: vehicle.id,
-           type: 'EXPENSE',
-           category: Category.RENT,
-           amount: vehicle.rentAmount,
-           date: today,
-           description: 'Aluguel Mensal (Gerado Automaticamente)'
-       });
-    }
+    // NOTE: Removed auto-generation of initial rent transaction.
+    // Logic: Rent is due in the future (next cycle), not immediately upon registration.
+    // The Dashboard component handles the projection of upcoming bills based on the due day.
   }
 
   updateVehicle(updatedVehicle: Vehicle): void {
@@ -80,6 +97,7 @@ class MockBackendService {
     localStorage.removeItem(KEYS.USER);
     localStorage.removeItem(KEYS.VEHICLES);
     localStorage.removeItem(KEYS.TRANSACTIONS);
+    localStorage.removeItem(KEYS.CATEGORIES);
   }
 }
 

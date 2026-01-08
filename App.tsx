@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ViewState, Vehicle, Transaction, User } from './types';
+import { ViewState, Vehicle, Transaction, User, CategoryItem } from './types';
 import { mockBackend } from './services/mockBackend';
 import AppLayout from './components/AppLayout';
 import Dashboard from './components/Dashboard';
@@ -7,9 +7,10 @@ import TransactionModal from './components/TransactionModal';
 import VehicleManagerModal from './components/VehicleManagerModal';
 import ReportsView from './components/ReportsView';
 import FeaturesModal from './components/FeaturesModal';
+import CategoryManagerModal from './components/CategoryManagerModal';
 import Onboarding from './components/Onboarding';
 import Button from './components/Button';
-import { LogOut, Star } from 'lucide-react';
+import { LogOut, Star, Tags } from 'lucide-react';
 
 const App: React.FC = () => {
   // Global State
@@ -18,12 +19,14 @@ const App: React.FC = () => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [activeVehicleId, setActiveVehicleId] = useState<string>('');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
   
   // UI State
   const [currentView, setCurrentView] = useState<ViewState['currentView']>('DASHBOARD');
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [isFeaturesModalOpen, setIsFeaturesModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
 
   // Initialization
@@ -34,9 +37,11 @@ const App: React.FC = () => {
       
       const loadedUser = mockBackend.getUser();
       const loadedVehicles = mockBackend.getVehicles();
+      const loadedCategories = mockBackend.getCategories();
       
       setUser(loadedUser);
       setVehicles(loadedVehicles);
+      setCategories(loadedCategories);
 
       if (loadedVehicles.length > 0) {
         setActiveVehicleId(loadedVehicles[0].id);
@@ -111,6 +116,16 @@ const App: React.FC = () => {
     setIsVehicleModalOpen(false);
   };
 
+  const handleAddCategory = (category: CategoryItem) => {
+    mockBackend.saveCategory(category);
+    setCategories(prev => [...prev, category]);
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    mockBackend.deleteCategory(id);
+    setCategories(prev => prev.filter(c => c.id !== id));
+  };
+
   const handleLogout = () => {
     mockBackend.clearData();
     setUser(null);
@@ -159,6 +174,9 @@ const App: React.FC = () => {
           onOpenTransaction={() => setIsTransactionModalOpen(true)}
           user={user}
           onUpdateUser={handleUpdateUser}
+          categories={categories}
+          onAddTransaction={handleAddTransaction}
+          onUpdateVehicle={handleSaveVehicle}
         />
       )}
 
@@ -195,7 +213,7 @@ const App: React.FC = () => {
       )}
 
       {currentView === 'REPORTS' && (
-        <ReportsView transactions={transactions} />
+        <ReportsView transactions={transactions} categories={categories} />
       )}
 
       {currentView === 'PROFILE' && (
@@ -224,11 +242,15 @@ const App: React.FC = () => {
             </button>
           </div>
 
+          <Button variant="secondary" fullWidth onClick={() => setIsCategoryModalOpen(true)}>
+            <Tags size={18} /> Gerenciar Categorias
+          </Button>
+
           <Button variant="ghost" fullWidth onClick={handleLogout} className="text-red-500 hover:text-red-600 hover:bg-red-50">
             <LogOut size={18} /> Sair do App (Resetar)
           </Button>
           
-          <p className="text-center text-xs text-slate-400 mt-8">Versão 1.0.0 (MVP)</p>
+          <p className="text-center text-xs text-slate-400 mt-8">Versão 1.1.0</p>
         </div>
       )}
 
@@ -238,6 +260,7 @@ const App: React.FC = () => {
         onClose={() => setIsTransactionModalOpen(false)}
         onSave={handleAddTransaction}
         vehicle={activeVehicle}
+        categories={categories}
       />
 
       <VehicleManagerModal
@@ -252,6 +275,14 @@ const App: React.FC = () => {
       <FeaturesModal 
         isOpen={isFeaturesModalOpen} 
         onClose={() => setIsFeaturesModalOpen(false)} 
+      />
+
+      <CategoryManagerModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        categories={categories}
+        onAddCategory={handleAddCategory}
+        onDeleteCategory={handleDeleteCategory}
       />
 
     </AppLayout>

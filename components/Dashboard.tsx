@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Transaction, Vehicle, Category, User } from '../types';
-import { formatCurrency, getDeviceLocale, handlePriceChange } from '../utils';
-import { TrendingUp, TrendingDown, Wallet, AlertCircle, CalendarClock, Target, Pencil, Check, Info, X } from 'lucide-react';
+import { Transaction, Vehicle, Category, User, CategoryItem } from '../types';
+import { formatCurrency, getDeviceLocale, handlePriceChange, formatDateForInput } from '../utils';
+import { TrendingUp, TrendingDown, Wallet, AlertCircle, CalendarClock, Target, Pencil, Check, Info, X, DollarSign, Activity } from 'lucide-react';
 import Button from './Button';
 
 interface DashboardProps {
@@ -10,6 +10,9 @@ interface DashboardProps {
   onOpenTransaction: () => void;
   user: User;
   onUpdateUser: (user: User) => void;
+  categories: CategoryItem[];
+  onAddTransaction: (transaction: Omit<Transaction, 'id'>) => void;
+  onUpdateVehicle: (vehicle: Vehicle) => void;
 }
 
 // Data structure for the Info Modal
@@ -24,10 +27,33 @@ interface InfoModalData {
   }[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOpenTransaction, user, onUpdateUser }) => {
+interface BillPaymentState {
+  name: string;
+  category: string;
+  expectedAmount: number;
+  dueDate: Date;
+  actualAmount: number;
+  paymentDate: string;
+  description: string;
+  parcelIndex?: number;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ 
+  transactions, 
+  activeVehicle, 
+  onOpenTransaction, 
+  user, 
+  onUpdateUser, 
+  categories,
+  onAddTransaction,
+  onUpdateVehicle
+}) => {
   const [isEditingGoal, setIsEditingGoal] = useState(false);
   const [tempGoal, setTempGoal] = useState(user.monthlyGoal || 3000);
   const [activeInfo, setActiveInfo] = useState<InfoModalData | null>(null);
+  const [billToPay, setBillToPay] = useState<BillPaymentState | null>(null);
+
+  const getCategoryLabel = (id: string) => categories.find(c => c.id === id)?.label || id;
 
   // Logic: Calculate Real Profit using PROVISIONS (Competência)
   // Real Profit = Earnings - Variable Costs - (Monthly Fixed Costs / 30 * Current Day) - 10% Maintenance Reserve
@@ -44,7 +70,10 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
 
     // 1. Calculate Earnings & Variable Costs from Transactions
     const monthlyTransactions = transactions.filter(t => {
-      const d = new Date(t.date);
+      // Robust local date parsing
+      const parts = t.date.split('T')[0].split('-');
+      // Create date at noon local time to avoid timezone edge cases
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
 
@@ -52,30 +81,46 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
       .filter(t => t.type === 'INCOME')
       .reduce((acc, t) => acc + t.amount, 0);
 
-    // Variable Costs (Fuel, Maintenance, Other) - Paid instantly
+    // Variable Costs
     const variableCosts = monthlyTransactions
-      .filter(t => t.type === 'EXPENSE' && (t.category === Category.FUEL || t.category === Category.MAINTENANCE || t.category === Category.OTHER))
+      .filter(t => t.type === 'EXPENSE' && (t.category === Category.FUEL || t.category === Category.MAINTENANCE || t.category === Category.OTHER || !Object.values(Category).includes(t.category as any)))
       .reduce((acc, t) => acc + t.amount, 0);
 
     // 2. Calculate Fixed Costs Provision (Pro-rated by day)
     let totalMonthlyFixed = 0;
+    let rentDailyProvision = 0;
     
     // Rent
     if (activeVehicle.ownershipType === 'RENTED' && activeVehicle.rentAmount) {
-      totalMonthlyFixed += activeVehicle.rentAmount;
-    }
-    // Financing
-    if (activeVehicle.ownershipType === 'FINANCED' && activeVehicle.financingInstallment) {
-      totalMonthlyFixed += activeVehicle.financingInstallment;
-    }
-    // Insurance
-    if (activeVehicle.insuranceInstallmentValue) {
-      totalMonthlyFixed += activeVehicle.insuranceInstallmentValue;
+      if (activeVehicle.rentFrequency === 'WEEKLY') {
+        // Convert weekly to monthly approximation for display, but use daily for provision
+        totalMonthlyFixed += activeVehicle.rentAmount * 4.33; // Approx
+        rentDailyProvision = activeVehicle.rentAmount / 7;
+      } else {
+        totalMonthlyFixed += activeVehicle.rentAmount;
+        rentDailyProvision = activeVehicle.rentAmount / daysInMonth;
+      }
     }
 
-    // Daily Cost Provision
-    const dailyFixedCost = totalMonthlyFixed / daysInMonth;
-    const provisionedFixedCosts = dailyFixedCost * currentDay;
+    // Financing
+    let financingAmount = 0;
+    if (activeVehicle.ownershipType === 'FINANCED' && activeVehicle.financingInstallment) {
+      financingAmount = activeVehicle.financingInstallment;
+      totalMonthlyFixed += financingAmount;
+    }
+    
+    // Insurance
+    let insuranceAmount = 0;
+    if (activeVehicle.insuranceInstallmentValue) {
+      insuranceAmount = activeVehicle.insuranceInstallmentValue;
+      totalMonthlyFixed += insuranceAmount;
+    }
+
+    // Daily Cost Provision Logic
+    // Rent is handled separately because of weekly frequency possibility
+    const otherFixedDailyCost = (financingAmount + insuranceAmount) / daysInMonth;
+    
+    const provisionedFixedCosts = (rentDailyProvision * currentDay) + (otherFixedDailyCost * currentDay);
     
     // 3. Maintenance Reserve (10% of Income)
     const maintenanceReserve = income * 0.10;
@@ -98,6 +143,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
 
   const { 
     income, 
+    variableCosts,
     totalCosts, 
     maintenanceReserve, 
     realProfit, 
@@ -110,21 +156,46 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
   // Logic for Goal Calculation
   const calculateGoalMetrics = () => {
     const goal = user.monthlyGoal || 0;
-    if (goal === 0) return { dailyNeeded: 0, progress: 0, remaining: 0, remainingDays: 0 };
+    if (goal === 0) return { dailyNetNeeded: 0, dailyGrossNeeded: 0, progress: 0, remaining: 0, remainingDays: 0, currentMargin: 0 };
 
-    const remainingAmount = goal - realProfit;
+    const remainingAmount = goal - realProfit; // This is NET remaining
     const remainingDays = daysInMonth - currentDay + 1; // Including today as a working day
-    
-    // If profit already exceeds goal, daily needed is 0
-    const dailyNeeded = remainingAmount > 0 ? remainingAmount / remainingDays : 0;
     
     // Progress percentage (clamped 0-100)
     const progress = Math.min(Math.max((realProfit / goal) * 100, 0), 100);
 
-    return { dailyNeeded, progress, remaining: remainingAmount, remainingDays };
+    // 1. Net Daily Needed (Lucro Livre para o bolso)
+    const dailyNetNeeded = remainingAmount > 0 ? remainingAmount / remainingDays : 0;
+
+    // 2. Gross Daily Needed (Faturamento Bruto no App)
+    // We need to account for costs. 
+    // If I need R$ 100 profit, and my margin is 50%, I need to drive R$ 200.
+    
+    let currentMargin = 0.60; // Default pessimistic margin (60% profit / 40% cost)
+    
+    if (income > 0) {
+      // Calculate actual margin based on month performance
+      // Margin = RealProfit / Income
+      const calculatedMargin = realProfit / income;
+      // Sanity check for margin (e.g. if negative profit, use default)
+      if (calculatedMargin > 0.1 && calculatedMargin <= 1) {
+         currentMargin = calculatedMargin;
+      }
+    }
+
+    const dailyGrossNeeded = dailyNetNeeded / currentMargin;
+
+    return { 
+      dailyNetNeeded, 
+      dailyGrossNeeded, 
+      progress, 
+      remaining: remainingAmount, 
+      remainingDays,
+      currentMargin 
+    };
   };
 
-  const { dailyNeeded, progress, remaining, remainingDays } = calculateGoalMetrics();
+  const { dailyNetNeeded, dailyGrossNeeded, progress, remaining, remainingDays, currentMargin } = calculateGoalMetrics();
 
   const handleSaveGoal = () => {
     onUpdateUser({ ...user, monthlyGoal: tempGoal });
@@ -141,29 +212,62 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     // Helper to find the actual next due date based on payment history
-    const getNextDueDate = (category: Category, dayOfMonth: number) => {
-      // Start checking from the current month's due date
-      // We set hour to 12 to avoid DST issues
-      let targetDate = new Date(now.getFullYear(), now.getMonth(), dayOfMonth, 12, 0, 0);
+    const getNextDueDate = (category: string, dueDay: number, frequency: 'MONTHLY' | 'WEEKLY' = 'MONTHLY') => {
+      let targetDate: Date;
       
-      // Safety limit: check up to 12 months ahead to prevent infinite loops
-      for (let i = 0; i < 12; i++) {
-        const windowStart = new Date(targetDate);
-        windowStart.setDate(targetDate.getDate() - 20);
+      if (frequency === 'MONTHLY') {
+        // Start checking from the current month's due date
+        targetDate = new Date(now.getFullYear(), now.getMonth(), dueDay, 12, 0, 0);
+      } else {
+        // WEEKLY logic
+        // dueDay is 1-7 (1=Monday, 7=Sunday)
+        // JavaScript getDay() returns 0=Sunday, 1=Monday...
+        const jsTargetDay = dueDay === 7 ? 0 : dueDay;
         
+        targetDate = new Date(now);
+        targetDate.setHours(12, 0, 0, 0);
+        
+        const currentJsDay = targetDate.getDay();
+        const distance = jsTargetDay - currentJsDay;
+        targetDate.setDate(targetDate.getDate() + distance);
+        
+        // Start looking from 3 weeks ago to catch missed payments
+        targetDate.setDate(targetDate.getDate() - 21);
+      }
+      
+      // Safety limit: check up to 12 months (or 52 weeks) ahead
+      const loopLimit = frequency === 'MONTHLY' ? 12 : 52;
+
+      for (let i = 0; i < loopLimit; i++) {
+        const windowStart = new Date(targetDate);
         const windowEnd = new Date(targetDate);
-        windowEnd.setDate(targetDate.getDate() + 15);
+
+        if (frequency === 'MONTHLY') {
+           windowStart.setDate(targetDate.getDate() - 20);
+           windowEnd.setDate(targetDate.getDate() + 15);
+        } else {
+           windowStart.setDate(targetDate.getDate() - 3);
+           windowEnd.setDate(targetDate.getDate() + 3);
+        }
 
         const isPaid = transactions.some(t => {
           if (t.category !== category || t.type !== 'EXPENSE') return false;
-          const tDate = new Date(t.date);
-          tDate.setHours(12, 0, 0, 0);
+          
+          // ROBUST DATE PARSING: Split YYYY-MM-DD
+          const parts = t.date.split('T')[0].split('-');
+          // Create a Date object at Noon (12:00) local time to avoid Timezone shifts
+          const tDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
+          
           return tDate >= windowStart && tDate <= windowEnd;
         });
 
         if (isPaid) {
-          // If paid, move target to next month
-          targetDate.setMonth(targetDate.getMonth() + 1);
+          // If paid, move target to next period
+          if (frequency === 'MONTHLY') {
+             targetDate.setMonth(targetDate.getMonth() + 1);
+          } else {
+             targetDate.setDate(targetDate.getDate() + 7);
+          }
         } else {
           // If not paid, this is the next due bill
           return targetDate;
@@ -189,9 +293,12 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
 
     if (activeVehicle.ownershipType === 'RENTED' && activeVehicle.rentAmount) {
       const dueDay = activeVehicle.rentDueDay || 5; 
-      const nextDate = getNextDueDate(Category.RENT, dueDay);
+      const frequency = activeVehicle.rentFrequency || 'MONTHLY';
+      const nextDate = getNextDueDate(Category.RENT, dueDay, frequency);
+      
       bills.push({ 
-        name: 'Aluguel', 
+        name: `Aluguel (${frequency === 'WEEKLY' ? 'Semanal' : 'Mensal'})`, 
+        category: Category.RENT,
         amount: activeVehicle.rentAmount, 
         date: nextDate,
         ...getStatus(nextDate)
@@ -200,9 +307,10 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
 
     if (activeVehicle.ownershipType === 'FINANCED' && activeVehicle.financingInstallment) {
       const dueDay = activeVehicle.financingDueDay || 10;
-      const nextDate = getNextDueDate(Category.FINANCING, dueDay);
+      const nextDate = getNextDueDate(Category.FINANCING, dueDay, 'MONTHLY');
       bills.push({ 
-        name: 'Financiamento', 
+        name: 'Financiamento',
+        category: Category.FINANCING,
         amount: activeVehicle.financingInstallment, 
         date: nextDate,
         ...getStatus(nextDate)
@@ -211,9 +319,10 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
 
     if (activeVehicle.insuranceInstallmentValue) {
       const dueDay = activeVehicle.insuranceDueDay || 10;
-      const nextDate = getNextDueDate(Category.INSURANCE, dueDay);
+      const nextDate = getNextDueDate(Category.INSURANCE, dueDay, 'MONTHLY');
       bills.push({ 
-        name: 'Seguro', 
+        name: 'Seguro',
+        category: Category.INSURANCE,
         amount: activeVehicle.insuranceInstallmentValue, 
         date: nextDate,
         ...getStatus(nextDate)
@@ -228,6 +337,57 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
 
   const upcomingBills = getUpcomingBills();
 
+  // --- PAYMENT HANDLERS ---
+
+  const initiatePayment = (bill: any) => {
+    let description = `Pagamento ${bill.name}`;
+    let parcelIndex = undefined;
+    
+    // Auto-detect parcel number for Financing
+    if (bill.category === Category.FINANCING && activeVehicle) {
+       const current = activeVehicle.financingPaidMonths || 0;
+       parcelIndex = current + 1;
+       description = `Pagamento Parcela ${parcelIndex}/${activeVehicle.financingTotalMonths || '?'}`;
+    }
+
+    setBillToPay({
+      name: bill.name,
+      category: bill.category,
+      expectedAmount: bill.amount,
+      actualAmount: bill.amount,
+      dueDate: bill.date,
+      paymentDate: formatDateForInput(new Date()),
+      description,
+      parcelIndex
+    });
+  };
+
+  const confirmPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!billToPay || !activeVehicle) return;
+
+    // 1. Add Transaction
+    onAddTransaction({
+      vehicleId: activeVehicle.id,
+      type: 'EXPENSE',
+      category: billToPay.category,
+      amount: billToPay.actualAmount,
+      date: billToPay.paymentDate,
+      description: billToPay.description
+    });
+
+    // 2. Update Vehicle State (if Financing)
+    if (billToPay.category === Category.FINANCING) {
+      const updatedVehicle = {
+        ...activeVehicle,
+        financingPaidMonths: (activeVehicle.financingPaidMonths || 0) + 1
+      };
+      onUpdateVehicle(updatedVehicle);
+    }
+
+    setBillToPay(null);
+  };
+
   // --- INFO MODAL HANDLERS ---
 
   const openRealProfitInfo = () => {
@@ -236,7 +396,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
       description: "Este não é apenas o saldo do banco. O Lucro Real desconta os gastos imediatos (combustível) + a depreciação do carro e custos fixos proporcionais aos dias que já passaram (aluguel/seguro/IPVA) + reserva de manutenção.",
       items: [
         { label: "Faturamento Bruto", value: `+ ${formatCurrency(income)}`, color: "text-emerald-600" },
-        { label: "Custos Variáveis (Combustível/Lavagem)", value: `- ${formatCurrency(transactions.filter(t => t.type === 'EXPENSE' && (t.category === Category.FUEL || t.category === Category.MAINTENANCE || t.category === Category.OTHER)).reduce((acc, t) => acc + t.amount, 0))}`, color: "text-red-500" },
+        { label: "Custos Variáveis", value: `- ${formatCurrency(variableCosts)}`, color: "text-red-500" },
         { label: "Provisão de Custos Fixos (Competência)", value: `- ${formatCurrency(provisionedFixedCosts)}`, color: "text-red-500" },
         { label: "Reserva de Manutenção (10%)", value: `- ${formatCurrency(maintenanceReserve)}`, color: "text-indigo-500" },
         { label: "Lucro Real Líquido", value: `= ${formatCurrency(realProfit)}`, color: "text-slate-900 font-bold border-t border-slate-200 pt-2" }
@@ -246,27 +406,15 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
 
   const openGoalInfo = () => {
     setActiveInfo({
-      title: "Meta Diária",
-      description: "Calculamos quanto você precisa ganhar livre (Lucro Real) por dia, considerando quantos dias faltam para acabar o mês, para atingir sua meta mensal.",
+      title: "Meta Diária Inteligente",
+      description: "O app projeta quanto você precisa faturar (bruto) para cobrir seus custos estimados e ainda sobrar o lucro livre que você deseja.",
       items: [
-        { label: "Sua Meta Mensal", value: formatCurrency(user.monthlyGoal || 0) },
-        { label: "Lucro Real Atual", value: formatCurrency(realProfit), color: realProfit >= 0 ? "text-emerald-600" : "text-red-500" },
-        { label: "Falta Atingir", value: formatCurrency(Math.max(0, (user.monthlyGoal || 0) - realProfit)) },
-        { label: "Dias Restantes (incluindo hoje)", value: `${remainingDays} dias` },
-        { label: "Necessário por dia", value: `= ${formatCurrency(dailyNeeded)}`, color: "text-blue-600 font-bold border-t border-slate-200 pt-2" }
-      ]
-    });
-  };
-
-  const openProvisionsInfo = () => {
-    setActiveInfo({
-      title: "Próximos Vencimentos (Competência)",
-      description: "Aqui mostramos o 'Custo de Competência'. O valor total das suas contas fixas é dividido pelos dias do mês. A barra de progresso mostra quanto do seu custo fixo você já 'consumiu' virtualmente até hoje.",
-      items: [
-        { label: "Custo Fixo Mensal Total", value: formatCurrency(totalMonthlyFixed) },
-        { label: "Dias corridos no mês", value: `${currentDay} de ${daysInMonth}` },
-        { label: "Custo Provisionado (Já consumido)", value: formatCurrency(provisionedFixedCosts), color: "text-red-500" },
-        { label: "Situação", value: upcomingBills.length > 0 ? `${upcomingBills.length} contas pendentes` : "Tudo pago!", color: "text-slate-600" }
+        { label: "Meta Mensal (Livre)", value: formatCurrency(user.monthlyGoal || 0) },
+        { label: "Falta (Livre)", value: formatCurrency(Math.max(0, (user.monthlyGoal || 0) - realProfit)) },
+        { label: "Dias Restantes", value: `${remainingDays} dias` },
+        { label: "Margem de Lucro Atual", value: `${Math.round(currentMargin * 100)}%` },
+        { label: "Faturamento Bruto Necessário", value: `= ${formatCurrency(dailyGrossNeeded)} / dia`, color: "text-blue-600 font-bold border-t border-slate-200 pt-2" },
+        { label: "Para sobrar (Lucro Líquido)", value: `~ ${formatCurrency(dailyNetNeeded)} / dia`, color: "text-emerald-600 text-xs" }
       ]
     });
   };
@@ -398,12 +546,19 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
            <div className="relative z-10">
               <div className="flex items-end gap-2 mb-2">
                  <span className="text-3xl font-bold text-blue-600 tracking-tight">
-                    {remaining > 0 ? formatCurrency(dailyNeeded) : 'Meta Batida! 🎉'}
+                    {remaining > 0 ? formatCurrency(dailyGrossNeeded) : 'Meta Batida! 🎉'}
                  </span>
                  {remaining > 0 && (
-                   <span className="text-sm text-slate-500 font-medium mb-1">/ dia</span>
+                   <span className="text-sm text-slate-500 font-medium mb-1">/ dia (Faturamento)</span>
                  )}
               </div>
+
+              {remaining > 0 && (
+                <div className="text-xs text-slate-500 mb-2 flex items-center gap-1">
+                   <Activity size={12} className="text-slate-400" />
+                   Considerando seus custos, fature isso para sobrar <span className="font-bold text-emerald-600">{formatCurrency(dailyNetNeeded)}</span>
+                </div>
+              )}
               
               <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-2">
                  <div 
@@ -414,7 +569,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
               
               <div className="flex justify-between text-xs text-slate-400">
                  <span>Faltam {remainingDays} dias</span>
-                 <span>{Math.round(progress)}% do objetivo</span>
+                 <span>{Math.round(progress)}% do objetivo (Líquido)</span>
               </div>
            </div>
          ) : (
@@ -429,15 +584,11 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
 
       {/* Fixed Costs & Provisions Widget */}
       {upcomingBills.length > 0 && (
-        <div 
-          onClick={openProvisionsInfo}
-          className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 cursor-pointer transition-transform active:scale-[0.98] group"
-        >
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
            <div className="flex items-center gap-2 mb-4">
               <CalendarClock className="text-primary-600" size={20} />
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 Próximos Vencimentos
-                <Info size={14} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
               </h3>
            </div>
            
@@ -450,28 +601,19 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
                          {bill.label} ({bill.date.toLocaleDateString(getDeviceLocale(), { day: '2-digit', month: '2-digit' })})
                       </p>
                    </div>
-                   <div className="text-right">
-                      <p className="font-bold text-slate-800">{formatCurrency(bill.amount)}</p>
-                      <p className="text-[10px] text-slate-400 uppercase">Valor Total</p>
+                   <div className="flex items-center gap-3">
+                     <div className="text-right">
+                        <p className="font-bold text-slate-800">{formatCurrency(bill.amount)}</p>
+                     </div>
+                     <button 
+                       onClick={() => initiatePayment(bill)}
+                       className="px-3 py-1.5 bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-lg text-xs font-bold transition-colors"
+                     >
+                       Pagar
+                     </button>
                    </div>
                 </div>
               ))}
-           </div>
-           
-           <div className="mt-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-              <p className="text-xs text-slate-500 mb-1 flex justify-between">
-                 <span>Provisão Mensal Acumulada</span>
-                 <span className="font-bold text-slate-700">{Math.round((provisionedFixedCosts / totalMonthlyFixed) * 100)}%</span>
-              </p>
-              <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                 <div 
-                   className="bg-primary-500 h-full rounded-full transition-all duration-1000"
-                   style={{ width: `${Math.min((provisionedFixedCosts / totalMonthlyFixed) * 100, 100)}%` }}
-                 ></div>
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1 text-center">
-                 Você já consumiu {formatCurrency(provisionedFixedCosts)} do seu custo fixo mensal.
-              </p>
            </div>
         </div>
       )}
@@ -528,7 +670,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
                    {t.type === 'INCOME' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                  </div>
                  <div>
-                   <p className="font-semibold text-slate-800 text-sm">{t.category}</p>
+                   <p className="font-semibold text-slate-800 text-sm">{getCategoryLabel(t.category)}</p>
                    <p className="text-xs text-slate-400">{new Date(t.date).toLocaleDateString(getDeviceLocale())}</p>
                  </div>
                </div>
@@ -544,6 +686,85 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, activeVehicle, onOp
           )}
         </div>
       </div>
+
+      {/* PAYMENT MODAL */}
+      {billToPay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+           <form 
+             onSubmit={confirmPayment}
+             className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 relative animate-scale-up"
+           >
+              <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                 <Check className="text-emerald-500" /> Confirmar Pagamento
+              </h3>
+              
+              <div className="space-y-4">
+                 <div>
+                    <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Descrição</label>
+                    <input 
+                       value={billToPay.description}
+                       onChange={e => setBillToPay({...billToPay, description: e.target.value})}
+                       className="w-full p-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary-500"
+                    />
+                 </div>
+
+                 <div className="flex gap-4">
+                    <div className="flex-1">
+                       <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Valor</label>
+                       <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">R$</span>
+                          <input 
+                             value={formatCurrency(billToPay.actualAmount).replace('R$', '').trim()}
+                             onChange={e => setBillToPay({...billToPay, actualAmount: handlePriceChange(e.target.value)})}
+                             className="w-full p-2 pl-8 text-sm font-bold border border-slate-200 rounded-lg outline-none focus:border-primary-500"
+                          />
+                       </div>
+                    </div>
+                    <div className="w-1/3">
+                       <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Data</label>
+                       <input 
+                          type="date"
+                          value={billToPay.paymentDate}
+                          onChange={e => setBillToPay({...billToPay, paymentDate: e.target.value})}
+                          className="w-full p-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary-500"
+                       />
+                    </div>
+                 </div>
+
+                 {/* Financing Specific Logic */}
+                 {billToPay.category === Category.FINANCING && (
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                       <label className="block text-xs font-medium text-slate-500 uppercase mb-1">Referente à Parcela</label>
+                       <input 
+                          type="number"
+                          value={billToPay.parcelIndex || ''}
+                          onChange={e => setBillToPay({...billToPay, parcelIndex: parseInt(e.target.value)})}
+                          className="w-full p-2 text-sm font-bold border border-slate-200 rounded-lg outline-none focus:border-primary-500"
+                       />
+                       <p className="text-[10px] text-slate-400 mt-1">O sistema atualizará a contagem automaticamente.</p>
+                    </div>
+                 )}
+
+                 {/* Comparison Logic */}
+                 {billToPay.expectedAmount !== billToPay.actualAmount && (
+                    <div className="text-xs flex items-center gap-2 p-2 rounded bg-slate-50 text-slate-600">
+                       <DollarSign size={14} />
+                       {billToPay.actualAmount < billToPay.expectedAmount ? (
+                          <span className="text-emerald-600 font-bold">Desconto de {formatCurrency(billToPay.expectedAmount - billToPay.actualAmount)}</span>
+                       ) : (
+                          <span className="text-red-500 font-bold">Juros de {formatCurrency(billToPay.actualAmount - billToPay.expectedAmount)}</span>
+                       )}
+                    </div>
+                 )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-6">
+                 <Button type="button" variant="secondary" onClick={() => setBillToPay(null)}>Cancelar</Button>
+                 <Button type="submit">Confirmar</Button>
+              </div>
+           </form>
+        </div>
+      )}
 
       {/* INFORMATION MODAL */}
       {activeInfo && (
