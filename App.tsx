@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ViewState, Vehicle, Transaction, User, CategoryItem, Account } from './types';
 import { mockBackend } from './services/mockBackend';
@@ -14,7 +15,6 @@ import Button from './components/Button';
 import { LogOut, Star, Tags } from 'lucide-react';
 
 const App: React.FC = () => {
-  // Global State
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -23,7 +23,6 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   
-  // UI State
   const [currentView, setCurrentView] = useState<ViewState['currentView']>('DASHBOARD');
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
@@ -31,26 +30,24 @@ const App: React.FC = () => {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
 
-  // Initialization
   useEffect(() => {
     const loadData = async () => {
-      // Simulated delay for realism
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 600));
       
       const loadedUser = mockBackend.getUser();
       const loadedVehicles = mockBackend.getVehicles();
       const loadedCategories = mockBackend.getCategories();
       const loadedAccounts = mockBackend.getAccounts();
+      const txs = mockBackend.getTransactions();
       
       setUser(loadedUser);
       setVehicles(loadedVehicles);
       setCategories(loadedCategories);
       setAccounts(loadedAccounts);
+      setTransactions(txs);
 
       if (loadedVehicles.length > 0) {
         setActiveVehicleId(loadedVehicles[0].id);
-        const txs = mockBackend.getTransactions(); // Load all for Financial View filtering
-        setTransactions(txs);
       }
 
       setIsLoading(false);
@@ -58,10 +55,8 @@ const App: React.FC = () => {
     loadData();
   }, []);
 
-  // Filter transactions for Dashboard (Active Vehicle Only)
   const dashboardTransactions = transactions.filter(t => t.vehicleId === activeVehicleId);
 
-  // Actions
   const handleOnboardingComplete = (vehicle: Vehicle) => {
     const newUser: User = {
       id: crypto.randomUUID(),
@@ -72,10 +67,8 @@ const App: React.FC = () => {
     mockBackend.saveUser(newUser);
     mockBackend.addVehicle(vehicle);
     
-    // Init accounts if first time
     const initialAccounts = mockBackend.getAccounts();
     setAccounts(initialAccounts);
-
     setUser(newUser);
     setVehicles([vehicle]);
     setActiveVehicleId(vehicle.id);
@@ -90,10 +83,8 @@ const App: React.FC = () => {
     const tx: Transaction = { ...newTx, id: crypto.randomUUID() };
     mockBackend.addTransaction(tx);
     
-    // Update local transactions
     setTransactions(prev => [...prev, tx]);
     
-    // Update local account balance
     if (tx.accountId) {
       setAccounts(prev => prev.map(acc => {
         if (acc.id === tx.accountId) {
@@ -115,13 +106,12 @@ const App: React.FC = () => {
     } else {
       mockBackend.addVehicle(vehicle);
       setVehicles(prev => [...prev, vehicle]);
-      setActiveVehicleId(vehicle.id); // Switch to new vehicle
+      setActiveVehicleId(vehicle.id);
     }
     setEditingVehicle(null);
   };
 
   const handleArchiveVehicle = (id: string) => {
-    // In a real app we would archive, here we just filter from UI for simplicity or alert
     const v = vehicles.find(veh => veh.id === id);
     if(v) {
       const updated = { ...v, isArchived: true };
@@ -150,23 +140,18 @@ const App: React.FC = () => {
   }
 
   const handleLogout = () => {
-    mockBackend.clearData();
-    setUser(null);
-    setVehicles([]);
-    setTransactions([]);
-    setAccounts([]);
-    setActiveVehicleId('');
-    setCurrentView('DASHBOARD');
+    if (confirm('Deseja realmente apagar todos os dados locais?')) {
+      mockBackend.clearData();
+      window.location.reload();
+    }
   };
-
-  // Render Logic
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin"></div>
-          <p className="text-slate-500 font-medium animate-pulse">Carregando MotoristaReal...</p>
+          <div className="w-16 h-16 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin"></div>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">MotoristaReal</p>
         </div>
       </div>
     );
@@ -205,19 +190,23 @@ const App: React.FC = () => {
       )}
 
       {currentView === 'FLEET' && (
-        <div className="space-y-4">
+        <div className="space-y-4 animate-fade-in px-1">
           <h2 className="text-2xl font-bold text-slate-800">Minha Frota</h2>
           {vehicles.map(v => (
-            <div key={v.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex justify-between items-center">
+            <div key={v.id} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 flex justify-between items-center group active:scale-95 transition-transform">
               <div>
                 <h3 className="font-bold text-slate-800">{v.model}</h3>
-                <p className="text-sm text-slate-500">{v.plate}</p>
-                <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded mt-1 inline-block">
+                <p className="text-xs text-slate-400 font-mono tracking-tighter">{v.plate}</p>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase mt-2 inline-block ${
+                  v.ownershipType === 'OWNED' ? 'bg-emerald-50 text-emerald-600' : 
+                  v.ownershipType === 'RENTED' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'
+                }`}>
                   {v.ownershipType === 'OWNED' ? 'Próprio' : v.ownershipType === 'RENTED' ? 'Alugado' : 'Financiado'}
                 </span>
               </div>
               <Button 
                 variant="secondary" 
+                className="px-4 py-2 text-xs"
                 onClick={() => {
                   setEditingVehicle(v);
                   setIsVehicleModalOpen(true);
@@ -227,12 +216,15 @@ const App: React.FC = () => {
               </Button>
             </div>
           ))}
-          <Button fullWidth variant="ghost" className="border-2 border-dashed border-slate-200" onClick={() => {
-             setEditingVehicle(null);
-             setIsVehicleModalOpen(true);
-          }}>
-            + Adicionar Veículo
-          </Button>
+          <button 
+            onClick={() => {
+               setEditingVehicle(null);
+               setIsVehicleModalOpen(true);
+            }}
+            className="w-full py-6 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-bold text-sm flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"
+          >
+            + Adicionar Carro
+          </button>
         </div>
       )}
 
@@ -251,44 +243,59 @@ const App: React.FC = () => {
       )}
 
       {currentView === 'PROFILE' && (
-        <div className="space-y-6">
-          <h2 className="text-2xl font-bold text-slate-800">Perfil</h2>
+        <div className="space-y-6 animate-fade-in px-1">
+          <h2 className="text-2xl font-bold text-slate-800">Ajustes</h2>
           
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center">
-            <div className="w-20 h-20 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-3">
+          <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100 text-center relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-blue-500"></div>
+            <div className="w-24 h-24 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center text-4xl font-black mx-auto mb-4 border-4 border-white shadow-xl">
               {user.name.charAt(0)}
             </div>
-            <h3 className="font-bold text-lg text-slate-800">{user.name}</h3>
-            <p className="text-slate-500">{user.email}</p>
+            <h3 className="font-black text-xl text-slate-800 tracking-tight">{user.name}</h3>
+            <p className="text-slate-400 text-sm font-medium">{user.email}</p>
           </div>
 
-          <div 
-            onClick={() => setIsFeaturesModalOpen(true)}
-            className="bg-gradient-to-r from-primary-500 to-emerald-600 p-6 rounded-2xl text-white shadow-lg cursor-pointer transform transition hover:scale-[1.02]"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <Star fill="white" className="text-white" />
-              <h3 className="font-bold text-lg">Seja PRO</h3>
-            </div>
-            <p className="text-primary-100 mb-4">Tenha acesso a relatórios avançados e exportação para contador.</p>
-            <button className="bg-white text-primary-600 px-4 py-2 rounded-lg font-bold text-sm w-full">
-              Ver Planos
+          <div className="grid grid-cols-1 gap-3">
+            <button 
+              onClick={() => setIsCategoryModalOpen(true)}
+              className="w-full bg-white p-5 rounded-3xl border border-slate-100 flex items-center justify-between group active:bg-slate-50 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-indigo-50 text-indigo-500 rounded-2xl">
+                  <Tags size={20} />
+                </div>
+                <span className="font-bold text-slate-700">Categorias de Lançamento</span>
+              </div>
+              <Tags size={16} className="text-slate-300" />
+            </button>
+
+            <button 
+              onClick={() => setIsFeaturesModalOpen(true)}
+              className="w-full bg-slate-800 p-5 rounded-3xl flex items-center justify-between group active:opacity-90 transition-opacity text-white"
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white/10 text-emerald-400 rounded-2xl">
+                  <Star size={20} fill="currentColor" />
+                </div>
+                <div className="text-left">
+                  <span className="font-bold block leading-tight">MotoristaReal PRO</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Desbloquear tudo</span>
+                </div>
+              </div>
             </button>
           </div>
 
-          <Button variant="secondary" fullWidth onClick={() => setIsCategoryModalOpen(true)}>
-            <Tags size={18} /> Gerenciar Categorias
-          </Button>
-
-          <Button variant="ghost" fullWidth onClick={handleLogout} className="text-red-500 hover:text-red-600 hover:bg-red-50">
-            <LogOut size={18} /> Sair do App (Resetar)
-          </Button>
+          <button 
+            onClick={handleLogout}
+            className="w-full py-4 text-red-500 font-bold text-sm flex items-center justify-center gap-2 mt-8 opacity-50 hover:opacity-100 transition-opacity"
+          >
+            <LogOut size={16} /> Resetar Aplicativo
+          </button>
           
-          <p className="text-center text-xs text-slate-400 mt-8">Versão 1.1.0</p>
+          <p className="text-center text-[10px] text-slate-300 font-black uppercase tracking-[0.2em]">Build 1.2.0-stable</p>
         </div>
       )}
 
-      {/* Modals */}
       <TransactionModal 
         isOpen={isTransactionModalOpen}
         onClose={() => setIsTransactionModalOpen(false)}

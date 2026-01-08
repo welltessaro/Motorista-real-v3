@@ -1,0 +1,18 @@
+
+{
+  "name": "MotoristaReal",
+  "short_name": "MotoristaReal",
+  "description": "Gestão financeira para motoristas de aplicativo.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#10b981",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3202/3202926.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
