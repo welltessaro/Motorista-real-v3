@@ -18,7 +18,7 @@ class BackendService {
   async init(): Promise<void> {
     if (this.isInitialized) return;
 
-    // 1. Initialize Google Service (Async)
+    // 1. Initialize Google Service (Async) - Non-blocking
     try {
       if (typeof window !== 'undefined') {
          setTimeout(() => googleDriveService.init(), 1000);
@@ -27,14 +27,25 @@ class BackendService {
       console.error("Google Init Error", e);
     }
 
-    // 2. Load from LocalStorage (Instant)
-    this.memoryCache[KEYS.USER] = JSON.parse(localStorage.getItem(KEYS.USER) || 'null');
-    this.memoryCache[KEYS.VEHICLES] = JSON.parse(localStorage.getItem(KEYS.VEHICLES) || '[]');
-    this.memoryCache[KEYS.TRANSACTIONS] = JSON.parse(localStorage.getItem(KEYS.TRANSACTIONS) || '[]');
-    this.memoryCache[KEYS.CATEGORIES] = JSON.parse(localStorage.getItem(KEYS.CATEGORIES) || JSON.stringify(DEFAULT_CATEGORIES));
+    // 2. Load from LocalStorage (Instant) with Error Handling
+    this.memoryCache[KEYS.USER] = this.safeLoad(KEYS.USER, null);
+    this.memoryCache[KEYS.VEHICLES] = this.safeLoad(KEYS.VEHICLES, []);
+    this.memoryCache[KEYS.TRANSACTIONS] = this.safeLoad(KEYS.TRANSACTIONS, []);
+    this.memoryCache[KEYS.CATEGORIES] = this.safeLoad(KEYS.CATEGORIES, JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)));
     this.memoryCache[KEYS.ACCOUNTS] = this.loadAccountsFromStorage();
 
     this.isInitialized = true;
+  }
+
+  // Helper to prevent crashes on corrupted JSON
+  private safeLoad(key: string, fallback: any): any {
+    try {
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : fallback;
+    } catch (e) {
+      console.warn(`Error loading key ${key}, resetting to default.`, e);
+      return fallback;
+    }
   }
 
   // Restore only from Google Drive
@@ -66,16 +77,24 @@ class BackendService {
   }
 
   private loadAccountsFromStorage(): Account[] {
-    const data = localStorage.getItem(KEYS.ACCOUNTS);
-    if (!data) {
+    try {
+      const data = localStorage.getItem(KEYS.ACCOUNTS);
+      if (!data) {
+        const defaultAccounts: Account[] = [
+          { id: 'acc_prof', name: 'Conta Profissional', type: 'CHECKING', balance: 0, isDefault: true, color: 'blue' },
+          { id: 'acc_pers', name: 'Conta Pessoal', type: 'CHECKING', balance: 0, isDefault: false, color: 'purple' },
+        ];
+        localStorage.setItem(KEYS.ACCOUNTS, JSON.stringify(defaultAccounts));
+        return defaultAccounts;
+      }
+      return JSON.parse(data);
+    } catch (e) {
+      // Fallback if accounts are corrupted
       const defaultAccounts: Account[] = [
-        { id: 'acc_prof', name: 'Conta Profissional', type: 'CHECKING', balance: 0, isDefault: true, color: 'blue' },
-        { id: 'acc_pers', name: 'Conta Pessoal', type: 'CHECKING', balance: 0, isDefault: false, color: 'purple' },
+          { id: 'acc_prof', name: 'Conta Profissional', type: 'CHECKING', balance: 0, isDefault: true, color: 'blue' },
       ];
-      localStorage.setItem(KEYS.ACCOUNTS, JSON.stringify(defaultAccounts));
       return defaultAccounts;
     }
-    return JSON.parse(data);
   }
 
   // --- PERSISTENCE HELPER ---

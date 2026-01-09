@@ -10,9 +10,8 @@ declare global {
 const CLIENT_ID_KEY = 'motoristareal_google_client_id';
 
 // --- ÁREA DE CONFIGURAÇÃO DO DESENVOLVEDOR ---
-// Cole seu OAuth Client ID aqui para não precisar configurar manualmente na UI toda vez.
-// Exemplo: '1234567890-abcdefgh.apps.googleusercontent.com'
-const HARDCODED_CLIENT_ID = '546591988002-rtdiqfi35i9d10mln0882gid2dqciemg.apps.googleusercontent.com'; 
+// Deixe vazio para forçar o usuário a configurar na interface
+const HARDCODED_CLIENT_ID = ''; 
 // ---------------------------------------------
 
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
@@ -27,38 +26,46 @@ class GoogleDriveService {
   private currentUser: any = null;
 
   public isConfigured(): boolean {
-    return !!this.getClientId();
+    const id = this.getClientId();
+    return !!id && id.length > 0;
   }
 
   public saveClientId(clientId: string) {
-    localStorage.setItem(CLIENT_ID_KEY, clientId);
+    localStorage.setItem(CLIENT_ID_KEY, clientId.trim());
     window.location.reload();
   }
 
   public getClientId(): string {
-    // Prioritize LocalStorage, fallback to Hardcoded constant
     return localStorage.getItem(CLIENT_ID_KEY) || HARDCODED_CLIENT_ID;
   }
 
   public async init() {
     if (!this.isConfigured()) return;
 
-    await Promise.all([this.loadGapi(), this.loadGis()]);
+    try {
+      await Promise.all([this.loadGapi(), this.loadGis()]);
+    } catch (e) {
+      console.error("Failed to initialize Google Services", e);
+    }
   }
 
   private loadGapi() {
     return new Promise<void>((resolve) => {
       if (typeof window.gapi === 'undefined') {
-         // Retry if script hasn't loaded yet
          setTimeout(() => this.loadGapi().then(resolve), 500);
          return;
       }
       window.gapi.load('client', async () => {
-        await window.gapi.client.init({
-          discoveryDocs: [DISCOVERY_DOC],
-        });
-        this.gapiInited = true;
-        resolve();
+        try {
+          await window.gapi.client.init({
+            discoveryDocs: [DISCOVERY_DOC],
+          });
+          this.gapiInited = true;
+          resolve();
+        } catch (error) {
+          console.error("GAPI Init Error", error);
+          resolve(); // Resolve anyway to not block app
+        }
       });
     });
   }
@@ -66,61 +73,70 @@ class GoogleDriveService {
   private loadGis() {
     return new Promise<void>((resolve) => {
       if (typeof window.google === 'undefined') {
-         // Retry if script hasn't loaded yet
          setTimeout(() => this.loadGis().then(resolve), 500);
          return;
       }
-      this.tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: this.getClientId(),
-        scope: SCOPES,
-        callback: (resp: any) => {
-          if (resp.error !== undefined) {
-            throw (resp);
-          }
-          this.accessToken = resp.access_token;
-          // Store basic user info if available from a previous hint, or fetch it
-          this.fetchUserInfo();
-        },
-      });
-      this.gisInited = true;
+      try {
+        this.tokenClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: this.getClientId(),
+          scope: SCOPES,
+          callback: (resp: any) => {
+            if (resp.error !== undefined) {
+              throw (resp);
+            }
+            this.accessToken = resp.access_token;
+            this.fetchUserInfo();
+          },
+        });
+        this.gisInited = true;
+      } catch (error) {
+        console.error("GIS Init Error", error);
+      }
       resolve();
     });
   }
 
   public signIn(): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (!this.gisInited) {
-        // Try simple init if not ready
-        this.init().then(() => {
-           if (!this.tokenClient) {
-             reject("Google Identity Services not initialized. Check your Client ID.");
-             return;
-           }
-           this.tokenClient.requestAccessToken({ prompt: 'consent' });
-           resolve();
-        }).catch(e => reject(e));
+      if (!this.isConfigured()) {
+        reject({ message: "Client ID não configurado." });
         return;
       }
-      
-      this.tokenClient.callback = async (resp: any) => {
-        if (resp.error) {
-          reject(resp);
-        } else {
-          this.accessToken = resp.access_token;
-          await this.fetchUserInfo();
-          resolve();
-        }
+
+      const proceed = () => {
+         if (!this.tokenClient) {
+           reject({ message: "Google Identity Services falhou ao iniciar. Verifique se o Client ID é válido." });
+           return;
+         }
+         this.tokenClient.callback = async (resp: any) => {
+          if (resp.error) {
+            reject(resp);
+          } else {
+            this.accessToken = resp.access_token;
+            await this.fetchUserInfo();
+            resolve();
+          }
+        };
+        this.tokenClient.requestAccessToken({ prompt: 'consent' });
       };
-      
-      this.tokenClient.requestAccessToken({ prompt: '' });
+
+      if (!this.gisInited) {
+        this.init().then(proceed).catch(reject);
+      } else {
+        proceed();
+      }
     });
   }
 
   public signOut() {
     const token = window.gapi?.client?.getToken();
     if (token !== null) {
-      window.google.accounts.oauth2.revoke(token.access_token);
-      window.gapi.client.setToken('');
+      try {
+        window.google.accounts.oauth2.revoke(token.access_token);
+        window.gapi.client.setToken('');
+      } catch (e) {
+        console.warn("Error revoking token", e);
+      }
       this.accessToken = null;
       this.currentUser = null;
       localStorage.removeItem('google_user_cache');
@@ -128,6 +144,11 @@ class GoogleDriveService {
   }
 
   public getUser() {
+    // Return cached user if available to prevent UI flicker
+    if (!this.currentUser) {
+       const cached = localStorage.getItem('google_user_cache');
+       if (cached) return JSON.parse(cached);
+    }
     return this.currentUser;
   }
 
@@ -136,10 +157,10 @@ class GoogleDriveService {
       const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: `Bearer ${this.accessToken}` }
       });
+      if (!response.ok) throw new Error('Failed to fetch user info');
       const data = await response.json();
       this.currentUser = data;
       localStorage.setItem('google_user_cache', JSON.stringify(data));
-      // Dispatch event to update UI
       window.dispatchEvent(new Event('google-auth-change'));
     } catch (e) {
       console.error(e);
@@ -169,15 +190,15 @@ class GoogleDriveService {
   public async downloadData(): Promise<any | null> {
     if (!this.accessToken) return null;
 
-    const fileId = await this.findBackupFile();
-    if (!fileId) return null;
-
     try {
+      const fileId = await this.findBackupFile();
+      if (!fileId) return null;
+
       const response = await window.gapi.client.drive.files.get({
         fileId: fileId,
         alt: 'media',
       });
-      return response.result; // This is the JSON content
+      return response.result;
     } catch (err) {
       console.error('Error downloading file', err);
       return null;
@@ -187,44 +208,41 @@ class GoogleDriveService {
   public async uploadData(data: any): Promise<void> {
     if (!this.accessToken) return;
 
-    const fileContent = JSON.stringify(data);
-    const fileId = await this.findBackupFile();
-
-    const metadata = {
-      name: BACKUP_FILE_NAME,
-      mimeType: 'application/json',
-      parents: !fileId ? ['appDataFolder'] : undefined, // Only set parent on create
-    };
-
-    const boundary = '-------314159265358979323846';
-    const delimiter = "\r\n--" + boundary + "\r\n";
-    const close_delim = "\r\n--" + boundary + "--";
-
-    const contentType = 'application/json';
-
-    const multipartRequestBody =
-        delimiter +
-        'Content-Type: application/json\r\n\r\n' +
-        JSON.stringify(metadata) +
-        delimiter +
-        'Content-Type: ' + contentType + '\r\n\r\n' +
-        fileContent +
-        close_delim;
-
-    const request = window.gapi.client.request({
-      'path': fileId ? `/upload/drive/v3/files/${fileId}` : '/upload/drive/v3/files',
-      'method': fileId ? 'PATCH' : 'POST',
-      'params': {'uploadType': 'multipart'},
-      'headers': {
-        'Content-Type': 'multipart/related; boundary="' + boundary + '"'
-      },
-      'body': multipartRequestBody
-    });
-
     try {
-      await request;
+      const fileContent = JSON.stringify(data);
+      const fileId = await this.findBackupFile();
+
+      const metadata = {
+        name: BACKUP_FILE_NAME,
+        mimeType: 'application/json',
+        parents: !fileId ? ['appDataFolder'] : undefined,
+      };
+
+      const boundary = '-------314159265358979323846';
+      const delimiter = "\r\n--" + boundary + "\r\n";
+      const close_delim = "\r\n--" + boundary + "--";
+      const contentType = 'application/json';
+
+      const multipartRequestBody =
+          delimiter +
+          'Content-Type: application/json\r\n\r\n' +
+          JSON.stringify(metadata) +
+          delimiter +
+          'Content-Type: ' + contentType + '\r\n\r\n' +
+          fileContent +
+          close_delim;
+
+      await window.gapi.client.request({
+        'path': fileId ? `/upload/drive/v3/files/${fileId}` : '/upload/drive/v3/files',
+        'method': fileId ? 'PATCH' : 'POST',
+        'params': {'uploadType': 'multipart'},
+        'headers': {
+          'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+        },
+        'body': multipartRequestBody
+      });
+
       console.log('Sync successful');
-      return;
     } catch (err) {
       console.error('Sync failed', err);
     }
