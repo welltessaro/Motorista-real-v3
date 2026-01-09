@@ -1,12 +1,13 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Vehicle, OwnershipType } from '../types';
 import Button from './Button';
 import { formatPlate, handlePriceChange, formatCurrency, isValidPlate, formatDateForInput } from '../utils';
-import { Car, ChevronRight, ChevronLeft, CheckCircle, Search, ChevronDown, AlertCircle, ShieldCheck, Calendar, CreditCard, Layers, Clock } from 'lucide-react';
+import { Car, ChevronRight, ChevronLeft, CheckCircle, Search, ChevronDown, AlertCircle, ShieldCheck, Calendar, CreditCard, Layers, Clock, User as UserIcon } from 'lucide-react';
 import { mockBackend } from '../services/mockBackend';
 
 interface OnboardingProps {
-  onComplete: (vehicle: Vehicle) => void;
+  onComplete: (data: { vehicle: Vehicle, userName: string }) => void;
 }
 
 const CAR_DATA: Record<string, string[]> = {
@@ -44,8 +45,12 @@ const WEEK_DAYS = [
 
 const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const [step, setStep] = useState(1);
+  const totalSteps = 4;
   
-  // Form State
+  // Step 1: User Name
+  const [userName, setUserName] = useState('');
+
+  // Form State (Vehicle)
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [plate, setPlate] = useState('');
@@ -103,7 +108,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     setShowModelSuggestions(false);
   };
 
-  const validateStep1 = () => {
+  const validateStep2 = () => {
     setPlateError(null);
     if (!isValidPlate(plate)) {
       setPlateError('Placa inválida. Use o formato AAA-0000 ou Mercosul.');
@@ -151,16 +156,18 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
       isArchived: false,
       createdAt: new Date().toISOString(),
     };
-    onComplete(vehicle);
+    
+    // Pass both vehicle and user name
+    onComplete({ vehicle, userName });
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col max-w-md mx-auto p-6 justify-center">
       <div className="mb-8 text-center">
         <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4 text-primary-600">
-          <Car size={32} />
+          {step === 1 ? <UserIcon size={32} /> : <Car size={32} />}
         </div>
-        <h1 className="text-2xl font-bold text-slate-800">Bem-vindo, Motorista!</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Bem-vindo!</h1>
         <p className="text-slate-500 mt-2">Vamos configurar seu perfil para calcular seu lucro real.</p>
       </div>
 
@@ -168,12 +175,36 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         
         {/* Progress Bar */}
         <div className="flex gap-2 mb-6">
-          {[1, 2, 3].map(i => (
-             <div key={i} className={`h-1.5 flex-1 rounded-full ${i <= step ? 'bg-primary-500' : 'bg-slate-100'}`} />
-          ))}
+          {Array.from({ length: totalSteps }).map((_, i) => {
+             const stepNum = i + 1;
+             return (
+               <div key={stepNum} className={`h-1.5 flex-1 rounded-full ${stepNum <= step ? 'bg-primary-500' : 'bg-slate-100'}`} />
+             );
+          })}
         </div>
 
         {step === 1 && (
+          <div className="space-y-4 animate-fade-in">
+            <h2 className="text-lg font-bold text-slate-700">Como você quer ser chamado?</h2>
+            
+            <div>
+              <label className="text-sm text-slate-500 font-medium">Seu Nome</label>
+              <input 
+                value={userName}
+                onChange={e => setUserName(e.target.value)}
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1 outline-none focus:ring-2 focus:ring-primary-500 text-lg font-medium text-slate-800"
+                placeholder="Ex: João Silva"
+                autoFocus
+              />
+            </div>
+
+            <Button fullWidth onClick={nextStep} disabled={!userName.trim()}>
+              Continuar <ChevronRight size={18} />
+            </Button>
+          </div>
+        )}
+
+        {step === 2 && (
           <div className="space-y-4 animate-fade-in">
             <h2 className="text-lg font-bold text-slate-700">Qual o seu carro?</h2>
             
@@ -270,13 +301,18 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
               )}
             </div>
             
-            <Button fullWidth onClick={validateStep1} disabled={!brand || !model || !plate}>
-              Continuar <ChevronRight size={18} />
-            </Button>
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={prevStep} className="px-3">
+                 <ChevronLeft size={20} />
+              </Button>
+              <Button fullWidth onClick={validateStep2} disabled={!brand || !model || !plate}>
+                Continuar <ChevronRight size={18} />
+              </Button>
+            </div>
           </div>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <div className="space-y-4 animate-fade-in">
             <h2 className="text-lg font-bold text-slate-700">Esse carro é...</h2>
             <div className="grid gap-3">
@@ -305,7 +341,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="space-y-4 animate-fade-in">
             <h2 className="text-lg font-bold text-slate-700">Custos Fixos</h2>
             

@@ -12,7 +12,7 @@ import CategoryManagerModal from './components/CategoryManagerModal';
 import FinancialView from './components/FinancialView';
 import Onboarding from './components/Onboarding';
 import Button from './components/Button';
-import { LogOut, Star, Tags, MessageSquare, Heart, Copy, Check, X } from 'lucide-react';
+import { LogOut, Tags, MessageSquare, Heart, Copy, Check, X } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -59,10 +59,12 @@ const App: React.FC = () => {
 
   const dashboardTransactions = transactions.filter(t => t.vehicleId === activeVehicleId);
 
-  const handleOnboardingComplete = (vehicle: Vehicle) => {
+  const handleOnboardingComplete = (data: { vehicle: Vehicle, userName: string }) => {
+    const { vehicle, userName } = data;
+    
     const newUser: User = {
       id: crypto.randomUUID(),
-      name: 'Motorista',
+      name: userName, // Use the name from the input
       email: 'driver@email.com',
       onboardingCompleted: true
     };
@@ -311,21 +313,6 @@ const App: React.FC = () => {
                 <span className="font-bold text-slate-700">Ajude nosso projeto</span>
               </div>
               <Heart size={16} className="text-slate-300" />
-            </button>
-
-            <button 
-              onClick={() => setIsFeaturesModalOpen(true)}
-              className="w-full bg-slate-800 p-5 rounded-3xl flex items-center justify-between group active:opacity-90 transition-opacity text-white"
-            >
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-white/10 text-emerald-400 rounded-2xl">
-                  <Star size={20} fill="currentColor" />
-                </div>
-                <div className="text-left">
-                  <span className="font-bold block leading-tight">MotoristaReal PRO</span>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Desbloquear tudo</span>
-                </div>
-              </div>
             </button>
           </div>
 
