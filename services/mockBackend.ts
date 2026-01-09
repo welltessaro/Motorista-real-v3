@@ -1,7 +1,6 @@
 
 import { Vehicle, Transaction, User, CategoryItem, DEFAULT_CATEGORIES, Account } from '../types';
 import { googleDriveService } from './googleDriveService';
-import { cloudflareService } from './cloudflareService';
 
 const KEYS = {
   VEHICLES: 'motoristareal_vehicles',
@@ -35,24 +34,13 @@ class BackendService {
     this.memoryCache[KEYS.CATEGORIES] = JSON.parse(localStorage.getItem(KEYS.CATEGORIES) || JSON.stringify(DEFAULT_CATEGORIES));
     this.memoryCache[KEYS.ACCOUNTS] = this.loadAccountsFromStorage();
 
-    // 3. Try Auto-Restore from Cloudflare if configured
-    if (cloudflareService.isConfigured()) {
-       this.restoreFromCloud();
-    }
-
     this.isInitialized = true;
   }
 
-  // Generic Restore (Tries Cloudflare first, then Google if triggered manually)
-  async restoreFromCloud(provider: 'CLOUDFLARE' | 'GOOGLE' = 'CLOUDFLARE'): Promise<boolean> {
+  // Restore only from Google Drive
+  async restoreFromCloud(): Promise<boolean> {
     try {
-      let data = null;
-      
-      if (provider === 'CLOUDFLARE') {
-         data = await cloudflareService.downloadData();
-      } else {
-         data = await googleDriveService.downloadData();
-      }
+      const data = await googleDriveService.downloadData();
 
       if (data) {
         // Update Local Storage
@@ -72,7 +60,7 @@ class BackendService {
         return true;
       }
     } catch (e) {
-      console.error(`Restore failed from ${provider}`, e);
+      console.error(`Restore failed from Google`, e);
     }
     return false;
   }
@@ -103,7 +91,6 @@ class BackendService {
   }
 
   public async triggerCloudSyncNow() {
-    // Public method to force sync immediately
     if (this.syncDebounceTimer) clearTimeout(this.syncDebounceTimer);
     await this.performSync();
   }
@@ -117,6 +104,9 @@ class BackendService {
   }
 
   private async performSync() {
+      // Only sync if Google is configured
+      if (!googleDriveService.isConfigured()) return;
+
       const fullBackup = {
         user: this.memoryCache[KEYS.USER],
         vehicles: this.memoryCache[KEYS.VEHICLES],
@@ -126,13 +116,7 @@ class BackendService {
         last_updated: new Date().toISOString()
       };
       
-      // Dual Sync Strategy
-      if (googleDriveService.isConfigured()) {
-        await googleDriveService.uploadData(fullBackup);
-      }
-      if (cloudflareService.isConfigured()) {
-        await cloudflareService.uploadData(fullBackup);
-      }
+      await googleDriveService.uploadData(fullBackup);
   }
 
   // --- USER ---
@@ -247,7 +231,6 @@ class BackendService {
     localStorage.clear();
     this.memoryCache = {};
     if (googleDriveService.isConfigured()) googleDriveService.signOut();
-    if (cloudflareService.isConfigured()) cloudflareService.clearConfig();
   }
 }
 
