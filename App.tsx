@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ViewState, Vehicle, Transaction, User, CategoryItem, Account } from './types';
 import { mockBackend } from './services/mockBackend';
+import { supabaseService } from './services/supabaseClient';
 import AppLayout from './components/AppLayout';
 import Dashboard from './components/Dashboard';
 import TransactionModal from './components/TransactionModal';
@@ -11,8 +12,9 @@ import FeaturesModal from './components/FeaturesModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import FinancialView from './components/FinancialView';
 import Onboarding from './components/Onboarding';
+import CloudConfig from './components/CloudConfig';
 import Button from './components/Button';
-import { LogOut, Tags, MessageSquare, Heart, Copy, Check, X } from 'lucide-react';
+import { LogOut, Tags, MessageSquare, Heart, Copy, Check, X, Cloud } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -29,12 +31,14 @@ const App: React.FC = () => {
   const [isFeaturesModalOpen, setIsFeaturesModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
+  const [isCloudConfigOpen, setIsCloudConfigOpen] = useState(false);
   const [pixCopied, setPixCopied] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      await new Promise(r => setTimeout(r, 600));
+      // Initialize Backend (Load LS + Try Cloud Sync)
+      await mockBackend.init();
       
       const loadedUser = mockBackend.getUser();
       const loadedVehicles = mockBackend.getVehicles();
@@ -48,18 +52,18 @@ const App: React.FC = () => {
       setAccounts(loadedAccounts);
       setTransactions(txs);
 
-      if (loadedVehicles.length > 0) {
+      if (loadedVehicles.length > 0 && !activeVehicleId) {
         setActiveVehicleId(loadedVehicles[0].id);
       }
 
       setIsLoading(false);
     };
     loadData();
-  }, []);
+  }, [activeVehicleId]);
 
   const dashboardTransactions = transactions.filter(t => t.vehicleId === activeVehicleId);
 
-  const handleOnboardingComplete = (data: { vehicle: Vehicle, userName: string }) => {
+  const handleOnboardingComplete = async (data: { vehicle: Vehicle, userName: string }) => {
     const { vehicle, userName } = data;
     
     const newUser: User = {
@@ -68,8 +72,8 @@ const App: React.FC = () => {
       email: 'driver@email.com',
       onboardingCompleted: true
     };
-    mockBackend.saveUser(newUser);
-    mockBackend.addVehicle(vehicle);
+    await mockBackend.saveUser(newUser);
+    await mockBackend.addVehicle(vehicle);
     
     const initialAccounts = mockBackend.getAccounts();
     setAccounts(initialAccounts);
@@ -78,14 +82,14 @@ const App: React.FC = () => {
     setActiveVehicleId(vehicle.id);
   };
 
-  const handleUpdateUser = (updatedUser: User) => {
-    mockBackend.saveUser(updatedUser);
+  const handleUpdateUser = async (updatedUser: User) => {
+    await mockBackend.saveUser(updatedUser);
     setUser(updatedUser);
   };
 
-  const handleAddTransaction = (newTx: Omit<Transaction, 'id'>) => {
+  const handleAddTransaction = async (newTx: Omit<Transaction, 'id'>) => {
     const tx: Transaction = { ...newTx, id: crypto.randomUUID() };
-    mockBackend.addTransaction(tx);
+    await mockBackend.addTransaction(tx);
     
     setTransactions(prev => [...prev, tx]);
     
@@ -102,24 +106,24 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveVehicle = (vehicle: Vehicle) => {
+  const handleSaveVehicle = async (vehicle: Vehicle) => {
     const exists = vehicles.find(v => v.id === vehicle.id);
     if (exists) {
-      mockBackend.updateVehicle(vehicle);
+      await mockBackend.updateVehicle(vehicle);
       setVehicles(prev => prev.map(v => v.id === vehicle.id ? vehicle : v));
     } else {
-      mockBackend.addVehicle(vehicle);
+      await mockBackend.addVehicle(vehicle);
       setVehicles(prev => [...prev, vehicle]);
       setActiveVehicleId(vehicle.id);
     }
     setEditingVehicle(null);
   };
 
-  const handleArchiveVehicle = (id: string) => {
+  const handleArchiveVehicle = async (id: string) => {
     const v = vehicles.find(veh => veh.id === id);
     if(v) {
       const updated = { ...v, isArchived: true };
-      mockBackend.updateVehicle(updated);
+      await mockBackend.updateVehicle(updated);
       const remaining = vehicles.filter(veh => veh.id !== id);
       setVehicles(remaining);
       if(remaining.length > 0) setActiveVehicleId(remaining[0].id);
@@ -128,24 +132,24 @@ const App: React.FC = () => {
     setIsVehicleModalOpen(false);
   };
 
-  const handleAddCategory = (category: CategoryItem) => {
-    mockBackend.saveCategory(category);
+  const handleAddCategory = async (category: CategoryItem) => {
+    await mockBackend.saveCategory(category);
     setCategories(prev => [...prev, category]);
   };
 
-  const handleDeleteCategory = (id: string) => {
-    mockBackend.deleteCategory(id);
+  const handleDeleteCategory = async (id: string) => {
+    await mockBackend.deleteCategory(id);
     setCategories(prev => prev.filter(c => c.id !== id));
   };
   
-  const handleAddAccount = (account: Account) => {
-    mockBackend.saveAccount(account);
+  const handleAddAccount = async (account: Account) => {
+    await mockBackend.saveAccount(account);
     setAccounts(prev => [...prev, account]);
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (confirm('Deseja realmente apagar todos os dados locais?')) {
-      mockBackend.clearData();
+      await mockBackend.clearData();
       window.location.reload();
     }
   };
@@ -179,6 +183,7 @@ const App: React.FC = () => {
   }
 
   const activeVehicle = vehicles.find(v => v.id === activeVehicleId) || null;
+  const isCloudConnected = supabaseService.isReady();
 
   return (
     <AppLayout
@@ -274,6 +279,24 @@ const App: React.FC = () => {
 
           <div className="grid grid-cols-1 gap-3">
             <button 
+              onClick={() => setIsCloudConfigOpen(true)}
+              className={`w-full p-5 rounded-3xl border flex items-center justify-between group active:bg-slate-50 transition-colors ${isCloudConnected ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100'}`}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-2xl ${isCloudConnected ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  <Cloud size={20} />
+                </div>
+                <div>
+                  <span className={`font-bold block ${isCloudConnected ? 'text-blue-700' : 'text-slate-700'}`}>
+                    {isCloudConnected ? 'Sincronização Ativa' : 'Configurar Nuvem'}
+                  </span>
+                  {isCloudConnected && <span className="text-[10px] text-blue-500">Backup automático habilitado</span>}
+                </div>
+              </div>
+              <Cloud size={16} className={isCloudConnected ? 'text-blue-400' : 'text-slate-300'} />
+            </button>
+
+            <button 
               onClick={() => setIsCategoryModalOpen(true)}
               className="w-full bg-white p-5 rounded-3xl border border-slate-100 flex items-center justify-between group active:bg-slate-50 transition-colors"
             >
@@ -326,6 +349,12 @@ const App: React.FC = () => {
           <p className="text-center text-[10px] text-slate-300 font-black uppercase tracking-[0.2em]">Build 1.0.0-stable</p>
         </div>
       )}
+
+      {/* Cloud Config Modal */}
+      <CloudConfig 
+        isOpen={isCloudConfigOpen} 
+        onClose={() => setIsCloudConfigOpen(false)} 
+      />
 
       {/* PIX Donation Modal */}
       {isPixModalOpen && (
