@@ -8,6 +8,13 @@ declare global {
 }
 
 const CLIENT_ID_KEY = 'motoristareal_google_client_id';
+
+// --- ÁREA DE CONFIGURAÇÃO DO DESENVOLVEDOR ---
+// Cole seu OAuth Client ID aqui para não precisar configurar manualmente na UI toda vez.
+// Exemplo: '1234567890-abcdefgh.apps.googleusercontent.com'
+const HARDCODED_CLIENT_ID = '546591988002-rtdiqfi35i9d10mln0882gid2dqciemg.apps.googleusercontent.com'; 
+// ---------------------------------------------
+
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
 const BACKUP_FILE_NAME = 'motoristareal_backup.json';
@@ -20,7 +27,7 @@ class GoogleDriveService {
   private currentUser: any = null;
 
   public isConfigured(): boolean {
-    return !!localStorage.getItem(CLIENT_ID_KEY);
+    return !!this.getClientId();
   }
 
   public saveClientId(clientId: string) {
@@ -29,7 +36,8 @@ class GoogleDriveService {
   }
 
   public getClientId(): string {
-    return localStorage.getItem(CLIENT_ID_KEY) || '';
+    // Prioritize LocalStorage, fallback to Hardcoded constant
+    return localStorage.getItem(CLIENT_ID_KEY) || HARDCODED_CLIENT_ID;
   }
 
   public async init() {
@@ -40,6 +48,11 @@ class GoogleDriveService {
 
   private loadGapi() {
     return new Promise<void>((resolve) => {
+      if (typeof window.gapi === 'undefined') {
+         // Retry if script hasn't loaded yet
+         setTimeout(() => this.loadGapi().then(resolve), 500);
+         return;
+      }
       window.gapi.load('client', async () => {
         await window.gapi.client.init({
           discoveryDocs: [DISCOVERY_DOC],
@@ -52,6 +65,11 @@ class GoogleDriveService {
 
   private loadGis() {
     return new Promise<void>((resolve) => {
+      if (typeof window.google === 'undefined') {
+         // Retry if script hasn't loaded yet
+         setTimeout(() => this.loadGis().then(resolve), 500);
+         return;
+      }
       this.tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: this.getClientId(),
         scope: SCOPES,
@@ -74,17 +92,16 @@ class GoogleDriveService {
       if (!this.gisInited) {
         // Try simple init if not ready
         this.init().then(() => {
+           if (!this.tokenClient) {
+             reject("Google Identity Services not initialized. Check your Client ID.");
+             return;
+           }
            this.tokenClient.requestAccessToken({ prompt: 'consent' });
-           // We resolve optimistically or setup a listener, 
-           // but for simplicity in this architecture we wait for the callback set in init
-           // Since callback is global, we can use a custom event or just wait a bit.
-           // A better way is to pass resolve to the callback, but let's assume success flow.
            resolve();
-        });
+        }).catch(e => reject(e));
         return;
       }
       
-      // Override callback for this specific request if possible, or just trigger:
       this.tokenClient.callback = async (resp: any) => {
         if (resp.error) {
           reject(resp);
@@ -100,7 +117,7 @@ class GoogleDriveService {
   }
 
   public signOut() {
-    const token = window.gapi.client.getToken();
+    const token = window.gapi?.client?.getToken();
     if (token !== null) {
       window.google.accounts.oauth2.revoke(token.access_token);
       window.gapi.client.setToken('');

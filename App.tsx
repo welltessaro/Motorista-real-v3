@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ViewState, Vehicle, Transaction, User, CategoryItem, Account } from './types';
 import { mockBackend } from './services/mockBackend';
 import { googleDriveService } from './services/googleDriveService';
+import { cloudflareService } from './services/cloudflareService';
 import AppLayout from './components/AppLayout';
 import Dashboard from './components/Dashboard';
 import TransactionModal from './components/TransactionModal';
@@ -13,8 +14,9 @@ import CategoryManagerModal from './components/CategoryManagerModal';
 import FinancialView from './components/FinancialView';
 import Onboarding from './components/Onboarding';
 import GoogleConfig from './components/GoogleConfig';
+import WorkerConfig from './components/WorkerConfig';
 import Button from './components/Button';
-import { LogOut, Tags, MessageSquare, Heart, Copy, Check, X, Cloud } from 'lucide-react';
+import { LogOut, Tags, MessageSquare, Heart, Copy, Check, X, Cloud, Server } from 'lucide-react';
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
@@ -32,6 +34,7 @@ const App: React.FC = () => {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
   const [isGoogleConfigOpen, setIsGoogleConfigOpen] = useState(false);
+  const [isWorkerConfigOpen, setIsWorkerConfigOpen] = useState(false);
   const [pixCopied, setPixCopied] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
 
@@ -184,6 +187,7 @@ const App: React.FC = () => {
 
   const activeVehicle = vehicles.find(v => v.id === activeVehicleId) || null;
   const isGoogleConnected = !!googleDriveService.getUser();
+  const isWorkerConnected = cloudflareService.isConfigured();
 
   return (
     <AppLayout
@@ -290,10 +294,28 @@ const App: React.FC = () => {
                   <span className={`font-bold block ${isGoogleConnected ? 'text-blue-700' : 'text-slate-700'}`}>
                     {isGoogleConnected ? 'Sincronização Drive' : 'Conectar Google Drive'}
                   </span>
-                  {isGoogleConnected && <span className="text-[10px] text-blue-500">Backup automático no seu Drive</span>}
+                  {isGoogleConnected && <span className="text-[10px] text-blue-500">Backup automático</span>}
                 </div>
               </div>
               <Cloud size={16} className={isGoogleConnected ? 'text-blue-400' : 'text-slate-300'} />
+            </button>
+
+            <button 
+              onClick={() => setIsWorkerConfigOpen(true)}
+              className={`w-full p-5 rounded-3xl border flex items-center justify-between group active:bg-slate-50 transition-colors ${isWorkerConnected ? 'bg-orange-50 border-orange-100' : 'bg-white border-slate-100'}`}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-2xl ${isWorkerConnected ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  <Server size={20} />
+                </div>
+                <div>
+                  <span className={`font-bold block ${isWorkerConnected ? 'text-orange-700' : 'text-slate-700'}`}>
+                    {isWorkerConnected ? 'Worker Conectado' : 'Configurar Worker'}
+                  </span>
+                  {isWorkerConnected && <span className="text-[10px] text-orange-600">Sync via Cloudflare Ativo</span>}
+                </div>
+              </div>
+              <Server size={16} className={isWorkerConnected ? 'text-orange-400' : 'text-slate-300'} />
             </button>
 
             <button 
@@ -354,6 +376,12 @@ const App: React.FC = () => {
       <GoogleConfig 
         isOpen={isGoogleConfigOpen} 
         onClose={() => setIsGoogleConfigOpen(false)} 
+      />
+
+      {/* Cloudflare Worker Config Modal */}
+      <WorkerConfig
+        isOpen={isWorkerConfigOpen}
+        onClose={() => setIsWorkerConfigOpen(false)}
       />
 
       {/* PIX Donation Modal */}

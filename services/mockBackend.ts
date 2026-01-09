@@ -1,6 +1,7 @@
 
 import { Vehicle, Transaction, User, CategoryItem, DEFAULT_CATEGORIES, Account } from '../types';
 import { googleDriveService } from './googleDriveService';
+import { cloudflareService } from './cloudflareService';
 
 const KEYS = {
   VEHICLES: 'motoristareal_vehicles',
@@ -18,10 +19,9 @@ class BackendService {
   async init(): Promise<void> {
     if (this.isInitialized) return;
 
-    // 1. Initialize Google Service
+    // 1. Initialize Google Service (Async)
     try {
       if (typeof window !== 'undefined') {
-         // Wait a bit for scripts to load if necessary
          setTimeout(() => googleDriveService.init(), 1000);
       }
     } catch (e) {
@@ -35,13 +35,25 @@ class BackendService {
     this.memoryCache[KEYS.CATEGORIES] = JSON.parse(localStorage.getItem(KEYS.CATEGORIES) || JSON.stringify(DEFAULT_CATEGORIES));
     this.memoryCache[KEYS.ACCOUNTS] = this.loadAccountsFromStorage();
 
+    // 3. Try Auto-Restore from Cloudflare if configured
+    if (cloudflareService.isConfigured()) {
+       this.restoreFromCloud();
+    }
+
     this.isInitialized = true;
   }
 
-  // Called explicitly when user logs in with Google to restore backup
-  async restoreFromCloud(): Promise<boolean> {
+  // Generic Restore (Tries Cloudflare first, then Google if triggered manually)
+  async restoreFromCloud(provider: 'CLOUDFLARE' | 'GOOGLE' = 'CLOUDFLARE'): Promise<boolean> {
     try {
-      const data = await googleDriveService.downloadData();
+      let data = null;
+      
+      if (provider === 'CLOUDFLARE') {
+         data = await cloudflareService.downloadData();
+      } else {
+         data = await googleDriveService.downloadData();
+      }
+
       if (data) {
         // Update Local Storage
         if (data.user) localStorage.setItem(KEYS.USER, JSON.stringify(data.user));
@@ -60,7 +72,7 @@ class BackendService {
         return true;
       }
     } catch (e) {
-      console.error("Restore failed", e);
+      console.error(`Restore failed from ${provider}`, e);
     }
     return false;
   }
@@ -90,11 +102,21 @@ class BackendService {
     this.triggerCloudSync();
   }
 
+  public async triggerCloudSyncNow() {
+    // Public method to force sync immediately
+    if (this.syncDebounceTimer) clearTimeout(this.syncDebounceTimer);
+    await this.performSync();
+  }
+
   private triggerCloudSync() {
     if (this.syncDebounceTimer) clearTimeout(this.syncDebounceTimer);
     
     this.syncDebounceTimer = setTimeout(async () => {
-      // Construct the backup object
+       await this.performSync();
+    }, 5000); // Sync after 5 seconds of inactivity
+  }
+
+  private async performSync() {
       const fullBackup = {
         user: this.memoryCache[KEYS.USER],
         vehicles: this.memoryCache[KEYS.VEHICLES],
@@ -104,8 +126,13 @@ class BackendService {
         last_updated: new Date().toISOString()
       };
       
-      await googleDriveService.uploadData(fullBackup);
-    }, 5000); // Sync after 5 seconds of inactivity
+      // Dual Sync Strategy
+      if (googleDriveService.isConfigured()) {
+        await googleDriveService.uploadData(fullBackup);
+      }
+      if (cloudflareService.isConfigured()) {
+        await cloudflareService.uploadData(fullBackup);
+      }
   }
 
   // --- USER ---
@@ -219,9 +246,8 @@ class BackendService {
   async clearData(): Promise<void> {
     localStorage.clear();
     this.memoryCache = {};
-    if (googleDriveService.isConfigured()) {
-       googleDriveService.signOut();
-    }
+    if (googleDriveService.isConfigured()) googleDriveService.signOut();
+    if (cloudflareService.isConfigured()) cloudflareService.clearConfig();
   }
 }
 

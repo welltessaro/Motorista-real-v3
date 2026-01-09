@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Cloud, Lock, CheckCircle, Save, Info, LogOut } from 'lucide-react';
+import { X, Cloud, Lock, CheckCircle, Save, Info, LogOut, Terminal } from 'lucide-react';
 import Button from './Button';
 import { googleDriveService } from '../services/googleDriveService';
 import { mockBackend } from '../services/mockBackend';
@@ -20,6 +20,8 @@ const GoogleConfig: React.FC<GoogleConfigProps> = ({ isOpen, onClose, onRestore 
     const checkUser = () => {
        const user = googleDriveService.getUser();
        setGoogleUser(user);
+       // Refresh ID in case it was updated in service
+       setClientId(googleDriveService.getClientId());
     };
     
     checkUser();
@@ -47,9 +49,14 @@ const GoogleConfig: React.FC<GoogleConfigProps> = ({ isOpen, onClose, onRestore 
             window.location.reload();
          }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Erro ao conectar com Google. Verifique o Client ID.');
+      const msg = error?.message || JSON.stringify(error);
+      if (msg.includes("origin_mismatch")) {
+         alert('Erro: A URL deste site não está autorizada no Google Cloud Console (Authorized JavaScript origins).');
+      } else {
+         alert('Erro ao conectar. Verifique o Client ID e as origens autorizadas.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -59,6 +66,8 @@ const GoogleConfig: React.FC<GoogleConfigProps> = ({ isOpen, onClose, onRestore 
     googleDriveService.signOut();
     setGoogleUser(null);
   };
+
+  const isConfigured = googleDriveService.isConfigured();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
@@ -85,7 +94,7 @@ const GoogleConfig: React.FC<GoogleConfigProps> = ({ isOpen, onClose, onRestore 
              <p>Seus dados são salvos em uma pasta oculta (App Data) no seu Google Drive. Ninguém, além de você, tem acesso.</p>
           </div>
 
-          {!googleDriveService.isConfigured() ? (
+          {!isConfigured ? (
             <div className="space-y-4">
                <div>
                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Google OAuth Client ID</label>
@@ -98,9 +107,16 @@ const GoogleConfig: React.FC<GoogleConfigProps> = ({ isOpen, onClose, onRestore 
                      placeholder="xxxxxxxx-xxxxxxxx.apps.googleusercontent.com"
                    />
                  </div>
-                 <p className="text-[10px] text-slate-400 mt-2">
-                   Para funcionar, você precisa criar um projeto no Google Cloud Console, habilitar a <strong>Google Drive API</strong> e criar uma credencial do tipo <strong>OAuth Client ID</strong> para Aplicação Web.
-                 </p>
+                 <div className="mt-3 text-[10px] text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                   <p className="font-bold mb-1">Passo a Passo:</p>
+                   <ol className="list-decimal pl-4 space-y-1">
+                     <li>Crie um projeto no <strong>Google Cloud Console</strong>.</li>
+                     <li>Habilite a API <strong>Google Drive API</strong>.</li>
+                     <li>Crie Credenciais > <strong>OAuth Client ID</strong>.</li>
+                     <li>Adicione a URL do app em <strong>Authorized JavaScript origins</strong>.</li>
+                     <li>Copie o Client ID e cole acima (ou no arquivo de serviço).</li>
+                   </ol>
+                 </div>
                </div>
                <Button fullWidth onClick={handleSaveId} disabled={!clientId}>
                   <Save size={18} /> Salvar Configuração
@@ -138,10 +154,15 @@ const GoogleConfig: React.FC<GoogleConfigProps> = ({ isOpen, onClose, onRestore 
                </div>
 
                <div className="pt-2 border-t border-slate-100">
-                  <p className="text-xs text-slate-400 text-center">
-                    ID: {googleDriveService.getClientId().substring(0, 15)}... 
-                    <button onClick={() => googleDriveService.saveClientId('')} className="text-red-400 underline ml-1">Alterar</button>
-                  </p>
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                     <span className="flex items-center gap-1 font-mono">
+                        <Terminal size={12} />
+                        ID: {clientId.substring(0, 8)}...{clientId.substring(clientId.length - 6)}
+                     </span>
+                     <button onClick={() => googleDriveService.saveClientId('')} className="text-red-400 hover:text-red-600 underline">
+                       Redefinir / Trocar
+                     </button>
+                  </div>
                </div>
             </div>
           )}
