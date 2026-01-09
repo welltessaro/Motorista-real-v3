@@ -156,9 +156,9 @@ const App: React.FC = () => {
 
   const handleCopyPix = () => {
     const pixKey = "64.324.898/0001-36";
-    navigator.clipboard.writeText(pixKey);
-    setPixCopied(true);
-    // Success message stays until closed or reset
+    navigator.clipboard.writeText(pixKey).then(() => {
+      setPixCopied(true);
+    });
   };
 
   if (isLoading) {
@@ -166,7 +166,7 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-16 h-16 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin"></div>
-          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">MotoristaReal</p>
+          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">MotoristaReal v1.0.0</p>
         </div>
       </div>
     );
@@ -336,7 +336,7 @@ const App: React.FC = () => {
             <LogOut size={16} /> Resetar Aplicativo
           </button>
           
-          <p className="text-center text-[10px] text-slate-300 font-black uppercase tracking-[0.2em]">Build 1.2.0-stable</p>
+          <p className="text-center text-[10px] text-slate-300 font-black uppercase tracking-[0.2em]">Build 1.0.0-stable</p>
         </div>
       )}
 
