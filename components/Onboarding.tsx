@@ -3,8 +3,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Vehicle, OwnershipType } from '../types';
 import Button from './Button';
 import { formatPlate, handlePriceChange, formatCurrency, isValidPlate, formatDateForInput } from '../utils';
-import { Car, ChevronRight, ChevronLeft, CheckCircle, Search, ChevronDown, AlertCircle, ShieldCheck, Calendar, CreditCard, Layers, Clock, User as UserIcon } from 'lucide-react';
+import { Car, ChevronRight, ChevronLeft, CheckCircle, Search, ChevronDown, AlertCircle, ShieldCheck, Calendar, CreditCard, Layers, Clock, User as UserIcon, Cloud } from 'lucide-react';
 import { mockBackend } from '../services/mockBackend';
+import GoogleConfig from './GoogleConfig';
 
 interface OnboardingProps {
   onComplete: (data: { vehicle: Vehicle, userName: string }) => void;
@@ -46,6 +47,7 @@ const WEEK_DAYS = [
 const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
   const [step, setStep] = useState(1);
   const totalSteps = 4;
+  const [isGoogleConfigOpen, setIsGoogleConfigOpen] = useState(false);
   
   // Step 1: User Name
   const [userName, setUserName] = useState('');
@@ -201,9 +203,19 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             <Button fullWidth onClick={nextStep} disabled={!userName.trim()}>
               Continuar <ChevronRight size={18} />
             </Button>
+
+            <div className="pt-4 border-t border-slate-100 mt-4 text-center">
+              <button 
+                onClick={() => setIsGoogleConfigOpen(true)}
+                className="text-xs font-bold text-primary-600 flex items-center justify-center gap-1 mx-auto hover:underline"
+              >
+                <Cloud size={14} /> Já tem conta? Restaurar do Google Drive
+              </button>
+            </div>
           </div>
         )}
 
+        {/* ... existing steps 2, 3, 4 (no changes needed for brevity, but I will include them to ensure file integrity) ... */}
         {step === 2 && (
           <div className="space-y-4 animate-fade-in">
             <h2 className="text-lg font-bold text-slate-700">Qual o seu carro?</h2>
@@ -553,6 +565,13 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         )}
 
       </div>
+      
+      {/* Restore/Login Modal */}
+      <GoogleConfig 
+        isOpen={isGoogleConfigOpen} 
+        onClose={() => setIsGoogleConfigOpen(false)} 
+        onRestore={() => {}} // Handle internal restore logic in component or reload
+      />
     </div>
   );
 };

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ViewState, Vehicle, Transaction, User, CategoryItem, Account } from './types';
 import { mockBackend } from './services/mockBackend';
-import { supabaseService } from './services/supabaseClient';
+import { googleDriveService } from './services/googleDriveService';
 import AppLayout from './components/AppLayout';
 import Dashboard from './components/Dashboard';
 import TransactionModal from './components/TransactionModal';
@@ -12,7 +12,7 @@ import FeaturesModal from './components/FeaturesModal';
 import CategoryManagerModal from './components/CategoryManagerModal';
 import FinancialView from './components/FinancialView';
 import Onboarding from './components/Onboarding';
-import CloudConfig from './components/CloudConfig';
+import GoogleConfig from './components/GoogleConfig';
 import Button from './components/Button';
 import { LogOut, Tags, MessageSquare, Heart, Copy, Check, X, Cloud } from 'lucide-react';
 
@@ -31,13 +31,13 @@ const App: React.FC = () => {
   const [isFeaturesModalOpen, setIsFeaturesModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isPixModalOpen, setIsPixModalOpen] = useState(false);
-  const [isCloudConfigOpen, setIsCloudConfigOpen] = useState(false);
+  const [isGoogleConfigOpen, setIsGoogleConfigOpen] = useState(false);
   const [pixCopied, setPixCopied] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      // Initialize Backend (Load LS + Try Cloud Sync)
+      // Initialize Backend
       await mockBackend.init();
       
       const loadedUser = mockBackend.getUser();
@@ -183,7 +183,7 @@ const App: React.FC = () => {
   }
 
   const activeVehicle = vehicles.find(v => v.id === activeVehicleId) || null;
-  const isCloudConnected = supabaseService.isReady();
+  const isGoogleConnected = !!googleDriveService.getUser();
 
   return (
     <AppLayout
@@ -279,21 +279,21 @@ const App: React.FC = () => {
 
           <div className="grid grid-cols-1 gap-3">
             <button 
-              onClick={() => setIsCloudConfigOpen(true)}
-              className={`w-full p-5 rounded-3xl border flex items-center justify-between group active:bg-slate-50 transition-colors ${isCloudConnected ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100'}`}
+              onClick={() => setIsGoogleConfigOpen(true)}
+              className={`w-full p-5 rounded-3xl border flex items-center justify-between group active:bg-slate-50 transition-colors ${isGoogleConnected ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100'}`}
             >
               <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-2xl ${isCloudConnected ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                <div className={`p-3 rounded-2xl ${isGoogleConnected ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
                   <Cloud size={20} />
                 </div>
                 <div>
-                  <span className={`font-bold block ${isCloudConnected ? 'text-blue-700' : 'text-slate-700'}`}>
-                    {isCloudConnected ? 'Sincronização Ativa' : 'Configurar Nuvem'}
+                  <span className={`font-bold block ${isGoogleConnected ? 'text-blue-700' : 'text-slate-700'}`}>
+                    {isGoogleConnected ? 'Sincronização Drive' : 'Conectar Google Drive'}
                   </span>
-                  {isCloudConnected && <span className="text-[10px] text-blue-500">Backup automático habilitado</span>}
+                  {isGoogleConnected && <span className="text-[10px] text-blue-500">Backup automático no seu Drive</span>}
                 </div>
               </div>
-              <Cloud size={16} className={isCloudConnected ? 'text-blue-400' : 'text-slate-300'} />
+              <Cloud size={16} className={isGoogleConnected ? 'text-blue-400' : 'text-slate-300'} />
             </button>
 
             <button 
@@ -350,10 +350,10 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Cloud Config Modal */}
-      <CloudConfig 
-        isOpen={isCloudConfigOpen} 
-        onClose={() => setIsCloudConfigOpen(false)} 
+      {/* Google Config Modal */}
+      <GoogleConfig 
+        isOpen={isGoogleConfigOpen} 
+        onClose={() => setIsGoogleConfigOpen(false)} 
       />
 
       {/* PIX Donation Modal */}
